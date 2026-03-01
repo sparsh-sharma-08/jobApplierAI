@@ -110,5 +110,29 @@ class Application(Base):
     user = relationship("User", back_populates="applications")
 
 
+class MockInterview(Base):
+    __tablename__ = "mock_interviews"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    job_id = Column(Integer, ForeignKey("jobs.id"))
+    questions = Column(JSON)  # List of dicts: {"question": "...", "strategy": "..."}
+    generated_at = Column(DateTime, default=datetime.utcnow)
+
+    job = relationship("Job")
+    user = relationship("User")
+
+
+class ColdEmail(Base):
+    __tablename__ = "cold_emails"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    job_id = Column(Integer, ForeignKey("jobs.id"))
+    email_body = Column(Text)
+    generated_at = Column(DateTime, default=datetime.utcnow)
+
+    job = relationship("Job")
+    user = relationship("User")
+
+
 def create_tables():
     Base.metadata.create_all(bind=engine)

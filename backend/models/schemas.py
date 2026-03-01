@@ -147,3 +147,21 @@ class ScoreExplanation(BaseModel):
     experience_match: bool
     recency_score: float
     reasoning: str
+
+
+# AI Tools
+class MockInterviewOut(BaseModel):
+    id: int
+    job_id: int
+    questions: List[Dict[str, str]]
+    generated_at: Optional[datetime]
+    class Config:
+        from_attributes = True
+
+class ColdEmailOut(BaseModel):
+    id: int
+    job_id: int
+    email_body: str
+    generated_at: Optional[datetime]
+    class Config:
+        from_attributes = True

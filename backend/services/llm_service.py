@@ -503,3 +503,94 @@ def parse_pdf_to_json(pdf_text: str) -> Dict[str, Any]:
     else:
         logger.error(f"No JSON brackets found in LLM response: {content}")
         raise ValueError("Failed to extract JSON from the AI response.")
+
+
+# ─────────────────────────────────────────────────────
+# AI Feature Upgrades: Mock Interviews & Cold Emails
+# ─────────────────────────────────────────────────────
+
+def generate_mock_interview(job_description: str, job_title: str, resume_data: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Generate 5 highly specific interview questions the candidate is likely to face for this exact role,
+    along with suggested talking points, based on their resume and the JD.
+    """
+    client = get_openai_client()
+    
+    # Extract candidate summary/skills for context
+    skills = resume_data.get("skills", [])
+    exp = [e.get("title", "") for e in resume_data.get("experience", [])]
+    
+    prompt = f"""
+    You are an expert technical interviewer and hiring manager.
+    
+    Job Title: {job_title}
+    Job Description Snippet: {job_description[:1500]}
+    
+    Candidate Skills: {', '.join(skills[:15])}
+    Candidate Experience: {', '.join(exp)}
+    
+    Generate exactly 5 highly specific interview questions this candidate is likely to face for this role.
+    For each question, provide a brief 'strategy' on how the candidate should answer, leveraging their specific skills.
+    
+    Format the output strictly as a JSON array of objects with keys "question" and "strategy".
+    Example:
+    [
+      {{"question": "How would you design X?", "strategy": "Mention your experience with Y and focus on Z."}}
+    ]
+    Return ONLY valid JSON.
+    """
+    
+    response = _call_llm_with_retry(
+        client=client,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=1500
+    )
+    
+    content = response.choices[0].message.content.strip()
+    start_idx = content.find('[')
+    end_idx = content.rfind(']')
+    
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        try:
+            return json.loads(content[start_idx:end_idx+1])
+        except json.JSONDecodeError:
+            pass
+            
+    # Fallback if parsing fails
+    return [
+        {"question": "Tell me about your experience with the key technologies mentioned in the JD.", "strategy": "Highlight overlaps between your resume skills and the job description."},
+        {"question": "Describe a challenging project from your past.", "strategy": "Use the STAR method."}
+    ]
+
+
+def generate_cold_email(job_title: str, company: str, resume_data: Dict[str, Any]) -> str:
+    """
+    Generate a short, punchy outreach email tailored for recruiters or hiring managers on LinkedIn.
+    """
+    client = get_openai_client()
+    skills = resume_data.get("skills", [])[:5]
+    name = resume_data.get("name", "[Your Name]")
+    
+    prompt = f"""
+    Write a short, punchy cold outreach message (for LinkedIn or email) to a recruiter or hiring manager at {company} regarding the {job_title} role.
+    
+    Candidate Name: {name}
+    Candidate Top Skills: {', '.join(skills)}
+    
+    RULES:
+    - Keep it under 100 words.
+    - Be professional but conversational.
+    - Highlight 1-2 key skills.
+    - Include a clear call to action (e.g., a quick chat).
+    - Do NOT include subject lines. Just the body.
+    """
+    
+    response = _call_llm_with_retry(
+        client=client,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=300
+    )
+    
+    return response.choices[0].message.content.strip()

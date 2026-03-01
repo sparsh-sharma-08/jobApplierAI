@@ -15,11 +15,12 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 import fitz # PyMuPDF
 
-from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application
+from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application, MockInterview, ColdEmail
 from models.schemas import (
     UserCreate, UserOut, Token,
     CandidateProfileCreate, CandidateProfileOut,
-    JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut
+    JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
+    MockInterviewOut, ColdEmailOut
 )
 from core.security import (
     get_password_hash, verify_password, create_access_token, 
@@ -27,7 +28,7 @@ from core.security import (
 )
 from core.helpers import profile_to_dict
 from services.scorer import score_job, batch_score_jobs
-from services.llm_service import generate_resume, generate_cover_letter, parse_pdf_to_json
+from services.llm_service import generate_resume, generate_cover_letter, parse_pdf_to_json, generate_mock_interview, generate_cold_email
 from services.resume_exporter import generate_resume_pdf_bytes
 from scrapers.job_scraper import JobScrapeManager
 
@@ -198,7 +199,7 @@ async def upload_resume_pdf(
         if not parsed_json:
             raise HTTPException(status_code=500, detail="Failed to parse resume using AI.")
 
-        # Auto-save the parsed JSON as master_resume on the profile
+        # Auto-save the parsed JSON as master_resume on the profile if it exists
         profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
         if profile:
             profile.master_resume = parsed_json
@@ -211,9 +212,6 @@ async def upload_resume_pdf(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error extracting resume PDF: {e}")
-        raise HTTPException(status_code=500, detail="An error occurred while processing the PDF.")
-
-
 @app.get("/profile/master-resume")
 def get_master_resume(
     db: Session = Depends(get_db),
@@ -585,6 +583,80 @@ def trigger_application(
     task = trigger_application_task.delay(app_id, current_user.id, mode)
 
     return {"message": "Application automation triggered", "task_id": task.id}
+
+
+# ─────────────────────────────────────────
+# AI FEATURE UPGRADES: MOCK INTERVIEW & COLD EMAIL
+# ─────────────────────────────────────────
+
+@app.post("/jobs/{job_id}/interview", response_model=MockInterviewOut)
+def create_mock_interview(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+        
+    resume = db.query(Resume).filter(Resume.job_id == job_id).order_by(Resume.id.desc()).first()
+    resume_data = resume.resume_data if resume and resume.resume_data else {}
+    
+    questions = generate_mock_interview(
+        job_description=job.description,
+        job_title=job.role,
+        resume_data=resume_data
+    )
+    
+    mock = MockInterview(user_id=current_user.id, job_id=job_id, questions=questions)
+    db.add(mock)
+    db.commit()
+    db.refresh(mock)
+    return mock
+
+
+@app.get("/jobs/{job_id}/interview", response_model=List[MockInterviewOut])
+def get_mock_interviews(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return db.query(MockInterview).filter(MockInterview.job_id == job_id, MockInterview.user_id == current_user.id).order_by(MockInterview.generated_at.desc()).all()
+
+
+@app.post("/jobs/{job_id}/cold-email", response_model=ColdEmailOut)
+def create_cold_email(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+        
+    resume = db.query(Resume).filter(Resume.job_id == job_id).order_by(Resume.id.desc()).first()
+    resume_data = resume.resume_data if resume and resume.resume_data else {}
+    
+    email_body = generate_cold_email(
+        job_title=job.role,
+        company=job.company,
+        resume_data=resume_data
+    )
+    
+    cold_email = ColdEmail(user_id=current_user.id, job_id=job_id, email_body=email_body)
+    db.add(cold_email)
+    db.commit()
+    db.refresh(cold_email)
+    return cold_email
+
+
+@app.get("/jobs/{job_id}/cold-email", response_model=List[ColdEmailOut])
+def get_cold_emails(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return db.query(ColdEmail).filter(ColdEmail.job_id == job_id, ColdEmail.user_id == current_user.id).order_by(ColdEmail.generated_at.desc()).all()
 
 
 # ─────────────────────────────────────────

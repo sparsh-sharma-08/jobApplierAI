@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Award, Target, TrendingUp, FileCheck, Briefcase, RefreshCw, Loader2, ArrowRight, FileText, Upload, Sparkles, Building2, MapPin, ChevronRight, BarChart3, Zap, Clock } from 'lucide-react';
+import { Award, Target, TrendingUp, FileCheck, Briefcase, RefreshCw, Loader2, ArrowRight, FileText, Upload, Sparkles, Building2, MapPin, ChevronRight, BarChart3, Zap, Clock, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import LLMProgressBar from '@/components/LLMProgressBar';
 import { useSettings } from '@/hooks/useSettings';
@@ -15,7 +15,7 @@ interface Job {
     source: string;
     status: string;
     posted_date: string;
-    score: { score: number; explanation?: { matched_skills?: string[] } } | null;
+    score: { score: number; explanation?: { matched_skills?: string[]; missing_keywords?: string[] } } | null;
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -88,6 +88,21 @@ export default function DashboardPage() {
             }
             sources[job.source] = (sources[job.source] || 0) + 1;
         }
+        const missingTally: Record<string, number> = {};
+        const topScoredJobs = [...jobs].filter(j => j.score?.score).sort((a, b) => (b.score?.score || 0) - (a.score?.score || 0)).slice(0, 20);
+
+        for (const job of topScoredJobs) {
+            const missing = job.score?.explanation?.missing_keywords || [];
+            for (const skill of missing) {
+                missingTally[skill] = (missingTally[skill] || 0) + 1;
+            }
+        }
+
+        const topMissing = Object.entries(missingTally)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([skill, count]) => ({ skill, count, percentage: Math.round((count / topScoredJobs.length) * 100) }));
+
         return {
             total_jobs: total,
             status_breakdown: breakdown,
@@ -95,6 +110,8 @@ export default function DashboardPage() {
             high_matches: highMatches,
             sources,
             profile_complete: hasProfile,
+            skill_gaps: topMissing,
+            analyzed_jobs_count: topScoredJobs.length
         };
     }, [jobs, hasProfile]);
 
@@ -240,9 +257,44 @@ export default function DashboardPage() {
             </div>
 
             {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Skill Gap Analysis Widget */}
+                <div className="glass-card p-5 lg:col-span-1">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-bold text-slate-900 flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-rose-500" /> Skill Gaps
+                        </h2>
+                    </div>
+                    {stats.skill_gaps.length === 0 ? (
+                        <div className="text-center py-6 text-slate-400">
+                            <Target className="w-8 h-8 mx-auto mb-2 opacity-50 text-emerald-500" />
+                            <p className="text-sm">No major skill gaps detected!</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                                Missing skills across your top {stats.analyzed_jobs_count} job matches. Learning these could boost your hiring chances.
+                            </p>
+                            <div className="space-y-3">
+                                {stats.skill_gaps.map(gap => (
+                                    <div key={gap.skill}>
+                                        <div className="flex justify-between text-xs mb-1.5">
+                                            <span className="font-semibold text-slate-700">{gap.skill}</span>
+                                            <span className="text-rose-600 font-medium">{gap.percentage}%</span>
+                                        </div>
+                                        <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                            <div className="bg-rose-400 h-1.5 rounded-full" style={{ width: `${gap.percentage}%` }}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* Top Matches */}
-                <div className="glass-card p-5">
+                <div className="glass-card p-5 lg:col-span-2">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="font-bold text-slate-900 flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-amber-500" /> Top Matches
@@ -304,10 +356,10 @@ export default function DashboardPage() {
                                         <p className="text-xs text-slate-500">{job.company} · {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
                                     </div>
                                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${job.source === 'remoteok' ? 'bg-green-50 text-green-600' :
-                                            job.source === 'jobicy' ? 'bg-purple-50 text-purple-600' :
-                                                job.source === 'himalayas' ? 'bg-sky-50 text-sky-600' :
-                                                    job.source === 'arbeitnow' ? 'bg-teal-50 text-teal-600' :
-                                                        'bg-slate-50 text-slate-500'
+                                        job.source === 'jobicy' ? 'bg-purple-50 text-purple-600' :
+                                            job.source === 'himalayas' ? 'bg-sky-50 text-sky-600' :
+                                                job.source === 'arbeitnow' ? 'bg-teal-50 text-teal-600' :
+                                                    'bg-slate-50 text-slate-500'
                                         }`}>{job.source}</span>
                                 </Link>
                             ))}

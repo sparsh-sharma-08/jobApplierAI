@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Briefcase, UserCircle, Settings, LogOut, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Briefcase, UserCircle, Settings, LogOut, Sparkles, KanbanSquare } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 const navItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Jobs Pipeline', href: '/jobs', icon: Briefcase },
+    { label: 'Tracker', href: '/tracker', icon: KanbanSquare },
     { label: 'Profile', href: '/profile', icon: UserCircle },
     { label: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -23,17 +24,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const token = localStorage.getItem('token');
         if (!token) { router.push('/'); return; }
 
-        // Try to get user profile; if none exists yet, create a minimal user object from token
+        // Try to get user profile
         fetch(`${API}/profile`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 if (res.status === 401) throw new Error('unauthorized');
                 return res.json();
             })
             .then(data => {
-                if (data) {
+                if (data && data.name) {
                     setUser({ name: data.name || data.email || 'User', email: data.email || '' });
                 } else {
-                    // No profile yet — decode email from JWT
+                    // No profile set up yet — decode email from JWT
                     try {
                         const payload = JSON.parse(atob(token.split('.')[1]));
                         setUser({ name: payload.sub || 'User', email: payload.sub || '' });
