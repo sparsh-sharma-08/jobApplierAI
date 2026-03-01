@@ -1,0 +1,100 @@
+{
+  "sample_profile": {
+    "name": "Arjun Sharma",
+    "email": "arjun.sharma@email.com",
+    "phone": "+91-9876543210",
+    "location": "Bengaluru, India",
+    "linkedin": "https://linkedin.com/in/arjunsharma",
+    "github": "https://github.com/arjunsharma",
+    "skills": [
+      "Python", "FastAPI", "Django", "PostgreSQL", "MongoDB",
+      "Redis", "Docker", "Git", "REST API", "JavaScript",
+      "React", "AWS", "Linux", "SQL", "Celery"
+    ],
+    "experience_level": "junior",
+    "preferred_roles": ["backend developer", "software engineer", "python developer", "full stack developer"],
+    "preferred_locations": ["Bengaluru", "Remote", "Hyderabad", "Mumbai"],
+    "remote_preference": "any",
+    "min_salary": 600000,
+    "target_companies": ["Razorpay", "CRED", "Zepto", "Meesho", "Groww"],
+    "master_resume": {
+      "summary": "Enthusiastic Junior Backend Developer with 1 year of experience building scalable REST APIs and microservices using Python and FastAPI. Passionate about clean code and developer experience.",
+      "experience": [
+        {
+          "title": "Backend Developer Intern",
+          "company": "TechStartup Pvt Ltd",
+          "start_date": "Jun 2023",
+          "end_date": "Dec 2023",
+          "description": ["Built REST APIs", "Worked with databases"],
+          "technologies": ["Python", "FastAPI", "PostgreSQL", "Redis"],
+          "highlights": [
+            "Built 15+ REST API endpoints for the core product using FastAPI, reducing response time by 30%",
+            "Implemented Redis caching layer that reduced database load by 40%",
+            "Wrote unit and integration tests achieving 85% code coverage",
+            "Deployed services using Docker on AWS EC2"
+          ]
+        }
+      ],
+      "projects": [
+        {
+          "name": "URL Shortener Service",
+          "description": "High-performance URL shortening service with analytics dashboard",
+          "technologies": ["Python", "FastAPI", "Redis", "PostgreSQL", "Docker"],
+          "link": "https://github.com/arjunsharma/url-shortener",
+          "highlights": [
+            "Handles 10,000+ requests/second using async FastAPI and Redis",
+            "Built analytics dashboard with click tracking and geographic data",
+            "Containerized with Docker, deployed on AWS"
+          ]
+        },
+        {
+          "name": "Expense Tracker API",
+          "description": "RESTful API for personal expense tracking with categorization and reports",
+          "technologies": ["Python", "Django", "PostgreSQL", "Celery"],
+          "link": "https://github.com/arjunsharma/expense-tracker",
+          "highlights": [
+            "Implemented JWT authentication and role-based access control",
+            "Celery tasks for async report generation and email notifications",
+            "Comprehensive API documentation using Swagger/OpenAPI"
+          ]
+        }
+      ],
+      "education": [
+        {
+          "degree": "B.Tech Computer Science",
+          "institution": "VTU Bengaluru",
+          "year": "2023",
+          "gpa": "8.2/10"
+        }
+      ],
+      "certifications": [
+        "AWS Cloud Practitioner",
+        "Python for Data Science (Coursera)"
+      ]
+    }
+  },
+  "sample_jobs": [
+    {
+      "external_id": "sample_001",
+      "source": "sample",
+      "company": "Razorpay",
+      "role": "Backend Engineer - Python",
+      "location": "Bengaluru, India",
+      "salary": "8-14 LPA",
+      "description": "We are looking for a Backend Engineer to join our Payments team. You will build scalable microservices handling millions of transactions daily.\n\nRequirements:\n- 1-3 years experience with Python\n- Strong knowledge of FastAPI or Django\n- Experience with PostgreSQL and Redis\n- Understanding of REST APIs and microservices\n- Docker/Kubernetes experience is a plus\n- AWS knowledge preferred",
+      "apply_link": "https://razorpay.com/jobs/backend-engineer",
+      "posted_date": "2026-02-25T00:00:00"
+    },
+    {
+      "external_id": "sample_002",
+      "source": "sample",
+      "company": "Remote Startup",
+      "role": "Junior Full Stack Developer",
+      "location": "Remote",
+      "salary": "6-10 LPA",
+      "description": "Join our fully remote team! We're building developer tools used by 50,000+ developers.\n\nRequirements:\n- Python backend development\n- React or Vue.js frontend\n- PostgreSQL or MongoDB\n- Git workflow\n- Good communication skills\n- Fresh graduates welcome",
+      "apply_link": "https://remotestartup.com/careers/fullstack",
+      "posted_date": "2026-02-26T00:00:00"
+    }
+  ]
+}
