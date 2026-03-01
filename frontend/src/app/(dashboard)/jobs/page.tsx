@@ -3,6 +3,10 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Search, Briefcase, MapPin, Building2, ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, XCircle, FileText, Download, Eye, FileSignature, Copy, CheckCheck, Edit3, Save, X, MessageSquare, Mail } from 'lucide-react';
 import LLMProgressBar from '@/components/LLMProgressBar';
+import SkeletonCard from '@/components/SkeletonCard';
+import EmptyState from '@/components/EmptyState';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -156,11 +160,19 @@ export default function JobsPage() {
                     const res = await fetch(`${API}/jobs?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.length > jobs.length) { clearInterval(poll); setJobs(data); setIsFetching(false); }
+                        if (data.length > jobs.length) {
+                            clearInterval(poll);
+                            setJobs(data);
+                            setIsFetching(false);
+                            toast.success(`Fetched ${data.length - jobs.length} new jobs! 🎉`);
+                        }
                     }
                 } catch { }
             }, 3000);
-        } catch { setIsFetching(false); }
+        } catch {
+            setIsFetching(false);
+            toast.error('Failed to trigger job fetch.');
+        }
     };
 
     const handleMarkApplied = async (jobId: number) => {
@@ -199,9 +211,11 @@ export default function JobsPage() {
 
                 // Update local UI
                 setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j));
+                toast.success('Successfully marked as applied! 🚀');
             }
         } catch (e) {
             console.error('Failed to mark as applied', e);
+            toast.error('Failed to mark job as applied.');
         }
     };
 
@@ -239,6 +253,7 @@ export default function JobsPage() {
         if (cl) {
             navigator.clipboard.writeText(cl);
             setCopiedCL(jobId);
+            toast.success('Cover letter copied to clipboard!');
             setTimeout(() => setCopiedCL(null), 2000);
         }
     };
@@ -302,6 +317,7 @@ export default function JobsPage() {
         if (email) {
             navigator.clipboard.writeText(email);
             setCopiedColdEmail(jobId);
+            toast.success('Cold email copied to clipboard!');
             setTimeout(() => setCopiedColdEmail(null), 2000);
         }
     };
@@ -320,8 +336,11 @@ export default function JobsPage() {
                 const data = await res.json();
                 setJobCoverLetters(prev => ({ ...prev, [jobId]: data.cover_letter }));
                 setEditingCoverLetter(null);
+                toast.success('Cover letter saved successfully!');
+            } else {
+                toast.error('Failed to save cover letter.');
             }
-        } catch { }
+        } catch { toast.error('Network error saving cover letter.'); }
         setSavingEdit(false);
     };
 
@@ -348,8 +367,14 @@ export default function JobsPage() {
 
     if (loading) {
         return (
-            <div className="flex h-[60vh] items-center justify-center">
-                <div className="w-80"><LLMProgressBar text="Loading jobs..." /></div>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <div className="h-8 w-48 bg-slate-200 rounded animate-pulse mb-2"></div>
+                        <div className="h-4 w-64 bg-slate-100 rounded animate-pulse"></div>
+                    </div>
+                </div>
+                {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
             </div>
         );
     }
@@ -397,11 +422,13 @@ export default function JobsPage() {
 
             {/* Job Cards */}
             {filteredAndSorted.length === 0 ? (
-                <div className="text-center py-16 glass-card">
-                    <Briefcase className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-600">No jobs found</h3>
-                    <p className="text-sm text-slate-400 mt-1">Try fetching new jobs or adjusting your filters.</p>
-                </div>
+                <EmptyState
+                    icon={Briefcase}
+                    title="No jobs found"
+                    description="We couldn't find any jobs matching your criteria. Try adjusting your search filters or fetch new jobs from the web."
+                    actionLabel="Fetch New Jobs"
+                    onAction={handleFetch}
+                />
             ) : (
                 <div className="space-y-4">
                     {filteredAndSorted.map(job => {
@@ -415,7 +442,13 @@ export default function JobsPage() {
                         const isEditingCL = editingCoverLetter === job.id;
 
                         return (
-                            <div key={job.id} className="glass-card overflow-hidden hover:shadow-xl transition-all duration-300">
+                            <motion.div
+                                layout
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                key={job.id}
+                                className="glass-card overflow-hidden hover:shadow-xl transition-all duration-300"
+                            >
                                 <div className="p-5 flex gap-4">
                                     {/* Score Badge */}
                                     <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${getScoreColor(score)} flex items-center justify-center flex-shrink-0 shadow-lg`}>
@@ -709,7 +742,7 @@ export default function JobsPage() {
                                         </div>
                                     </div>
                                 )}
-                            </div>
+                            </motion.div>
                         );
                     })}
                 </div>

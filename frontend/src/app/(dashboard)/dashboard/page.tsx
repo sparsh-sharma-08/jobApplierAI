@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { Award, Target, TrendingUp, FileCheck, Briefcase, RefreshCw, Loader2, ArrowRight, FileText, Upload, Sparkles, Building2, MapPin, ChevronRight, BarChart3, Zap, Clock, AlertTriangle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import LLMProgressBar from '@/components/LLMProgressBar';
+import SkeletonCard from '@/components/SkeletonCard';
+import { toast } from 'sonner';
 import { useSettings } from '@/hooks/useSettings';
 import Link from 'next/link';
 
@@ -147,19 +149,32 @@ export default function DashboardPage() {
                     const res = await fetch(`${API}/jobs?limit=500`, { headers: { Authorization: `Bearer ${token}` } });
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.length > prevCount) { clearInterval(poll); setJobs(data); setIsFetchingJobs(false); }
+                        if (data.length > prevCount) {
+                            clearInterval(poll);
+                            setJobs(data);
+                            setIsFetchingJobs(false);
+                            toast.success(`Fetched ${data.length - prevCount} new jobs! 🎉`);
+                        }
                     }
                 } catch { }
             }, 3000);
         } catch {
             setIsFetchingJobs(false);
+            toast.error('Failed to trigger job validation.');
         }
     };
 
     if (loading) {
         return (
-            <div className="flex h-[60vh] items-center justify-center">
-                <div className="w-80"><LLMProgressBar text="Loading dashboard..." /></div>
+            <div className="space-y-6">
+                <div className="h-32 bg-slate-200 rounded-2xl animate-pulse"></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-slate-200 rounded-xl animate-pulse"></div>)}
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1"><SkeletonCard /></div>
+                    <div className="lg:col-span-2"><SkeletonCard /></div>
+                </div>
             </div>
         );
     }

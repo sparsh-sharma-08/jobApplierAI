@@ -6,6 +6,8 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSo
 import { CSS } from '@dnd-kit/utilities';
 import { Briefcase, Building2, MapPin, Loader2, GripVertical, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import LLMProgressBar from '@/components/LLMProgressBar';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -112,7 +114,6 @@ export default function TrackerPage() {
     const [applications, setApplications] = useState<Application[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeId, setActiveId] = useState<number | null>(null);
-    const [statusMessage, setStatusMessage] = useState('');
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -196,11 +197,13 @@ export default function TrackerPage() {
 
             if (res.ok) {
                 const colTitle = COLUMNS.find(c => c.id === activeItem.status)?.title;
-                setStatusMessage(`Moved to ${colTitle}`);
-                setTimeout(() => setStatusMessage(''), 3000);
+                toast.success(`Moved to ${colTitle}`);
+            } else {
+                toast.error('Failed to update status.');
             }
         } catch (e) {
             console.error('Failed to update status', e);
+            toast.error('Network error moving application.');
         }
     };
 
@@ -208,8 +211,8 @@ export default function TrackerPage() {
 
     if (isLoading) {
         return (
-            <div className="h-full flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-primary-500" />
+            <div className="flex h-[60vh] items-center justify-center">
+                <div className="w-80"><LLMProgressBar text="Loading tracker..." /></div>
             </div>
         );
     }
@@ -224,20 +227,6 @@ export default function TrackerPage() {
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">Manage your job search pipeline via drag-and-drop.</p>
                 </div>
-
-                <AnimatePresence>
-                    {statusMessage && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            className="bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm"
-                        >
-                            <CheckCircle2 className="w-4 h-4" />
-                            {statusMessage}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
             </div>
 
             <div className="flex-1 overflow-x-auto pb-6">
