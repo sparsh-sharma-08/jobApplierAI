@@ -447,7 +447,8 @@ export default function JobsPage() {
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 key={job.id}
-                                className="glass-card overflow-hidden hover:shadow-xl transition-all duration-300"
+                                onClick={() => setExpandedJob(isExpanded ? null : job.id)}
+                                className="glass-card overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
                             >
                                 <div className="p-5 flex gap-4">
                                     {/* Score Badge */}
@@ -504,12 +505,13 @@ export default function JobsPage() {
                                                 </button>
                                             )}
 
-                                            <button onClick={() => setExpandedJob(isExpanded ? null : job.id)}
-                                                className="text-xs font-medium text-slate-500 hover:text-slate-700 flex items-center gap-1 border border-slate-200 px-3 py-1.5 rounded-lg bg-white">
-                                                {isExpanded ? <><ChevronUp className="w-3.5 h-3.5" />Less</> : <><ChevronDown className="w-3.5 h-3.5" />Details</>}
-                                            </button>
+                                            <a href={`/jobs/${job.id}`} onClick={(e) => e.stopPropagation()}
+                                                className="text-xs font-medium text-slate-500 hover:text-slate-700 flex items-center gap-1 border border-slate-200 px-3 py-1.5 rounded-lg bg-white transition-colors">
+                                                <Eye className="w-3.5 h-3.5" /> Full Details
+                                            </a>
                                             <a href={job.apply_link} target="_blank" rel="noopener noreferrer"
-                                                className="text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1 px-3 py-1.5 rounded-lg shadow-sm">
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
                                                 <ExternalLink className="w-3.5 h-3.5" />Apply
                                             </a>
                                         </div>
@@ -518,7 +520,7 @@ export default function JobsPage() {
 
                                 {/* Expanded View */}
                                 {isExpanded && (
-                                    <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="px-5 pb-5 pt-2 border-t border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300" onClick={(e) => e.stopPropagation()}>
                                         {/* Missing Skills */}
                                         {missingSkills.length > 0 && (
                                             <div>

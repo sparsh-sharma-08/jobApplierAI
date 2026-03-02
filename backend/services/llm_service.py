@@ -516,15 +516,17 @@ def generate_mock_interview(job_description: str, job_title: str, resume_data: D
     """
     client = get_openai_client()
     
-    # Extract candidate summary/skills for context
+    job_desc = job_description or "No description provided."
     skills = resume_data.get("skills", [])
-    exp = [e.get("title", "") for e in resume_data.get("experience", [])]
+    skills = [s for s in skills if s]
+    exp = [e.get("title") for e in resume_data.get("experience", []) if isinstance(e, dict)]
+    exp = [title for title in exp if title]
     
     prompt = f"""
     You are an expert technical interviewer and hiring manager.
     
     Job Title: {job_title}
-    Job Description Snippet: {job_description[:1500]}
+    Job Description Snippet: {job_desc[:1500]}
     
     Candidate Skills: {', '.join(skills[:15])}
     Candidate Experience: {', '.join(exp)}
@@ -569,8 +571,9 @@ def generate_cold_email(job_title: str, company: str, resume_data: Dict[str, Any
     Generate a short, punchy outreach email tailored for recruiters or hiring managers on LinkedIn.
     """
     client = get_openai_client()
-    skills = resume_data.get("skills", [])[:5]
-    name = resume_data.get("name", "[Your Name]")
+    skills = resume_data.get("skills", [])
+    skills = [s for s in skills if s][:5]
+    name = resume_data.get("name") or "[Your Name]"
     
     prompt = f"""
     Write a short, punchy cold outreach message (for LinkedIn or email) to a recruiter or hiring manager at {company} regarding the {job_title} role.

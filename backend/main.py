@@ -20,7 +20,7 @@ from models.schemas import (
     UserCreate, UserOut, Token,
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
-    MockInterviewOut, ColdEmailOut
+    MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate
 )
 from core.security import (
     get_password_hash, verify_password, create_access_token, 
@@ -383,24 +383,22 @@ def generate_resume_for_job(
     if existing:
         existing.resume_data = resume_data
         existing.cover_letter = cover_letter
-        existing.file_path_json = None
-        existing.file_path_docx = None
-        existing.file_path_pdf = None
         db.commit()
         db.refresh(existing)
+        existing.file_path_pdf = f"/resumes/{existing.id}/pdf"
+        db.commit()
         resume_record = existing
     else:
         resume_record = Resume(
             job_id=job_id,
             resume_data=resume_data,
-            cover_letter=cover_letter,
-            file_path_json=None,
-            file_path_docx=None,
-            file_path_pdf=None
+            cover_letter=cover_letter
         )
         db.add(resume_record)
         db.commit()
         db.refresh(resume_record)
+        resume_record.file_path_pdf = f"/resumes/{resume_record.id}/pdf"
+        db.commit()
 
     return {
         "message": "Resume generated",
@@ -451,6 +449,11 @@ def get_job_resume(
     ).order_by(Resume.id.desc()).first()
     if not resume:
         raise HTTPException(404, "Resume not generated yet")
+    
+    if not resume.file_path_pdf:
+        resume.file_path_pdf = f"/resumes/{resume.id}/pdf"
+        db.commit()
+    
     return resume
 
 
@@ -624,6 +627,23 @@ def get_mock_interviews(
     return db.query(MockInterview).filter(MockInterview.job_id == job_id, MockInterview.user_id == current_user.id).order_by(MockInterview.generated_at.desc()).all()
 
 
+@app.put("/jobs/{job_id}/interview/{interview_id}", response_model=MockInterviewOut)
+def update_mock_interview(
+    job_id: int,
+    interview_id: int,
+    update: MockInterviewUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    mock = db.query(MockInterview).filter(MockInterview.id == interview_id, MockInterview.job_id == job_id, MockInterview.user_id == current_user.id).first()
+    if not mock:
+        raise HTTPException(404, "Mock interview not found")
+    mock.questions = update.questions
+    db.commit()
+    db.refresh(mock)
+    return mock
+
+
 @app.post("/jobs/{job_id}/cold-email", response_model=ColdEmailOut)
 def create_cold_email(
     job_id: int,
@@ -657,6 +677,23 @@ def get_cold_emails(
     current_user: User = Depends(get_current_user)
 ):
     return db.query(ColdEmail).filter(ColdEmail.job_id == job_id, ColdEmail.user_id == current_user.id).order_by(ColdEmail.generated_at.desc()).all()
+
+
+@app.put("/jobs/{job_id}/cold-email/{email_id}", response_model=ColdEmailOut)
+def update_cold_email(
+    job_id: int,
+    email_id: int,
+    update: ColdEmailUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    cold = db.query(ColdEmail).filter(ColdEmail.id == email_id, ColdEmail.job_id == job_id, ColdEmail.user_id == current_user.id).first()
+    if not cold:
+        raise HTTPException(404, "Cold email not found")
+    cold.email_body = update.email_body
+    db.commit()
+    db.refresh(cold)
+    return cold
 
 
 # ─────────────────────────────────────────

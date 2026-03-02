@@ -158,6 +158,9 @@ class MockInterviewOut(BaseModel):
     class Config:
         from_attributes = True
 
+class MockInterviewUpdate(BaseModel):
+    questions: List[Dict[str, str]]
+
 class ColdEmailOut(BaseModel):
     id: int
     job_id: int
@@ -165,3 +168,6 @@ class ColdEmailOut(BaseModel):
     generated_at: Optional[datetime]
     class Config:
         from_attributes = True
+
+class ColdEmailUpdate(BaseModel):
+    email_body: str
