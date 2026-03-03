@@ -157,7 +157,7 @@ export default function DashboardPage() {
             await apiFetch(`${API}/jobs/fetch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(missingLocations.length > 0 ? missingLocations : ['remoteok']),
+                body: JSON.stringify(missingLocations.length > 0 ? missingLocations : ['remotive']),
             });
             let attempts = 0;
             const prevCount = jobs.length;
@@ -421,7 +421,7 @@ export default function DashboardPage() {
                                             <p className="font-semibold text-slate-900 text-sm truncate">{job.role}</p>
                                             <p className="text-xs text-slate-500">{job.company} · {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
                                         </div>
-                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${job.source === 'remoteok' ? 'bg-green-50 text-green-600' :
+                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${job.source === 'remotive' ? 'bg-green-50 text-green-600' :
                                             job.source === 'jobicy' ? 'bg-purple-50 text-purple-600' :
                                                 job.source === 'himalayas' ? 'bg-sky-50 text-sky-600' :
                                                     job.source === 'arbeitnow' ? 'bg-teal-50 text-teal-600' :

@@ -20,7 +20,7 @@ export interface AppSettings {
     highlightNewJobs: boolean;
 }
 
-const ALL_SOURCES = ['remoteok', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin'];
+const ALL_SOURCES = ['remotive', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin'];
 
 const DEFAULT_SETTINGS: AppSettings = {
     currency: 'INR',
@@ -43,7 +43,7 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 export const SOURCE_LABELS: Record<string, string> = {
-    remoteok: 'RemoteOK',
+    remotive: 'Remotive',
     arbeitnow: 'Arbeitnow',
     jobicy: 'Jobicy',
     himalayas: 'Himalayas',

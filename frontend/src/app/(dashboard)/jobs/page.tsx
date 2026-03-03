@@ -27,7 +27,7 @@ interface Job {
 }
 
 const sourceColors: Record<string, string> = {
-    remoteok: 'bg-green-100 text-green-700',
+    remotive: 'bg-green-100 text-green-700',
     arbeitnow: 'bg-teal-100 text-teal-700',
     jobicy: 'bg-purple-100 text-purple-700',
     himalayas: 'bg-sky-100 text-sky-700',

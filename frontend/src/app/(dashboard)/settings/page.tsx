@@ -280,7 +280,7 @@ export default function SettingsPage() {
                             {ALL_SOURCES.map(source => {
                                 const isEnabled = settings.enabledSources.includes(source);
                                 const colors: Record<string, string> = {
-                                    remoteok: 'border-green-200 bg-green-50',
+                                    remotive: 'border-green-200 bg-green-50',
                                     arbeitnow: 'border-teal-200 bg-teal-50',
                                     jobicy: 'border-purple-200 bg-purple-50',
                                     himalayas: 'border-sky-200 bg-sky-50',
@@ -288,7 +288,7 @@ export default function SettingsPage() {
                                     linkedin: 'border-blue-200 bg-blue-50',
                                 };
                                 const descriptions: Record<string, string> = {
-                                    remoteok: 'Remote-first jobs worldwide (free API)',
+                                    remotive: 'Remote-first jobs worldwide (free API)',
                                     arbeitnow: 'European & remote jobs (free API)',
                                     jobicy: 'Remote jobs with industry & level info (free API)',
                                     himalayas: 'Remote jobs with salary data (free API)',

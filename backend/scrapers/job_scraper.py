@@ -24,10 +24,10 @@ def _human_delay(min_s=0.5, max_s=1.5):
 
 
 # ─────────────────────────────────────────────────────
-# 1. RemoteOK  —  Public JSON API, no auth
+# 1. Remotive  —  Public JSON API, no auth
 # ─────────────────────────────────────────────────────
-class RemoteOKScraper:
-    API_URL = "https://remoteok.com/api"
+class RemotiveScraper:
+    API_URL = "https://remotive.com/api/remote-jobs"
 
     def scrape(self, roles: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
         try:
@@ -35,64 +35,55 @@ class RemoteOKScraper:
             headers = {"User-Agent": "Mozilla/5.0 CareerCopilot/1.0"}
             proxies = {"http": HTTP_PROXY, "https": HTTP_PROXY} if HTTP_PROXY else None
             _human_delay(1, 2)
-            response = requests.get(self.API_URL, headers=headers, timeout=15, proxies=proxies)
-            response.raise_for_status()
+            
+            job_results = []
+            
+            for role in roles:
+                # The remotive API sometimes fails on spaces in search, urlencoding helps or just relying on raw search
+                search_term = role.split()[0] if role else ""
+                params = {"search": search_term, "limit": max_jobs}
+                response = requests.get(self.API_URL, params=params, headers=headers, timeout=15, proxies=proxies)
+                response.raise_for_status()
 
-            data = response.json()
-            if isinstance(data, list) and data:
-                data = data[1:]  # First element is metadata
-
-            jobs = []
-            role_keywords = _build_keywords(roles)
-
-            for item in data[:200]:
-                if not isinstance(item, dict):
+                data = response.json()
+                if "jobs" not in data:
                     continue
-                position = (item.get("position") or "").lower()
-                tags = [t.lower() for t in item.get("tags", [])]
+                
+                for item in data["jobs"][:max_jobs]:
+                    if not isinstance(item, dict):
+                        continue
 
-                if not any(kw in position or any(kw in tag for tag in tags) for kw in role_keywords):
-                    continue
+                    job_id = _make_job_id("remotive", str(item.get("id", item.get("url", ""))))
+                    apply_link = item.get("url") or ""
 
-                job_id = _make_job_id("remoteok", str(item.get("id", item.get("url", ""))))
-                apply_link = item.get("url") or item.get("apply_url") or ""
+                    description = item.get("description", "")
+                    posted_date = _parse_date(item.get("publication_date"))
 
-                description_parts = [
-                    item.get("description", ""),
-                    f"Tags: {', '.join(item.get('tags', []))}",
-                ]
-                description = "\n".join(p for p in description_parts if p)
+                    salary = item.get("salary") or ""
 
-                posted_date = _parse_date(item.get("date"))
+                    job_results.append({
+                        "external_id": job_id,
+                        "source": "remotive",
+                        "company": item.get("company_name", "Unknown"),
+                        "role": item.get("title", ""),
+                        "location": item.get("candidate_required_location", "Remote"),
+                        "salary": salary,
+                        "description": description[:5000],
+                        "apply_link": apply_link,
+                        "posted_date": posted_date,
+                        "raw_data": {"category": item.get("category", ""), "id": item.get("id")}
+                    })
 
-                salary_min = item.get('salary_min', '')
-                salary_max = item.get('salary_max', '')
-                salary = ""
-                if salary_min and salary_max:
-                    salary = f"${salary_min:,}-${salary_max:,}" if isinstance(salary_min, (int, float)) else f"${salary_min}-${salary_max}"
-                elif salary_min:
-                    salary = f"${salary_min}+"
-
-                jobs.append({
-                    "external_id": job_id,
-                    "source": "remoteok",
-                    "company": item.get("company", "Unknown"),
-                    "role": item.get("position", ""),
-                    "location": "Remote",
-                    "salary": salary,
-                    "description": description[:5000],
-                    "apply_link": apply_link,
-                    "posted_date": posted_date,
-                    "raw_data": {"tags": item.get("tags", []), "id": item.get("id")}
-                })
-
-                if len(jobs) >= max_jobs:
+                    if len(job_results) >= max_jobs:
+                        break
+                        
+                if len(job_results) >= max_jobs:
                     break
 
-            return jobs
+            return job_results
 
         except Exception as e:
-            logger.error(f"RemoteOK scrape error: {e}")
+            logger.error(f"Remotive scrape error: {e}")
             return []
 
 
@@ -503,7 +494,7 @@ class JobScrapeManager:
 
     def __init__(self):
         self.scrapers = {
-            "remoteok": RemoteOKScraper(),
+            "remotive": RemotiveScraper(),
             "arbeitnow": ArbeitnowScraper(),
             "jobicy": JobicyScraper(),
             "himalayas": HimalayasScraper(),
@@ -528,7 +519,7 @@ class JobScrapeManager:
 
             logger.info(f"Fetching from {source}...")
             try:
-                if source in ("remoteok", "arbeitnow", "jobicy", "himalayas"):
+                if source in ("remotive", "arbeitnow", "jobicy", "himalayas"):
                     jobs = scraper.scrape(roles, max_jobs_per_source)
                 elif source == "adzuna":
                     jobs = scraper.scrape(roles, locations, max_jobs_per_source)

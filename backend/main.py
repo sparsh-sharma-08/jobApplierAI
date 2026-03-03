@@ -325,7 +325,7 @@ def fetch_jobs(
     if not profile:
         raise HTTPException(400, "Please set up your profile first")
 
-    sources_to_fetch = sources or ["remoteok"]
+    sources_to_fetch = sources or ["remotive"]
     roles = profile.preferred_roles or ["software engineer"]
     locations = profile.preferred_locations or []
     
