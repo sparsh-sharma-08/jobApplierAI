@@ -122,22 +122,34 @@ def score_job(
 
     score += loc_score
 
-    # --- Salary Match (0–5 points) ---
+    # --- Salary Match (-20 to 10 points) ---
     salary_match = None
-    salary_score = 3  # neutral
+    salary_score = 0  # neutral by default
     min_salary = profile.get("min_salary")
     job_salary_str = job.get("salary") or ""
     if min_salary and job_salary_str:
-        # try extract numbers from salary string
-        numbers = re.findall(r'\d+', job_salary_str.replace(',', ''))
+        s_str = job_salary_str.lower().replace(',', '').replace(' ', '')
+        # extract ranges like 150000, 15lpa, 15l, 100k, $100k
+        numbers = re.findall(r'(\d+)(k|lpa|l|m|cr)?', s_str)
         if numbers:
-            max_offered = int(numbers[-1])
-            if max_offered >= min_salary:
-                salary_score = 5
-                salary_match = True
-            else:
-                salary_score = 1
-                salary_match = False
+            max_offered = 0
+            for num, suffix in numbers:
+                val = int(num)
+                if suffix == 'k': val *= 1000
+                elif suffix in ('l', 'lpa'): val *= 100000
+                elif suffix in ('cr'): val *= 10000000
+                elif suffix == 'm': val *= 1000000
+                if val > max_offered:
+                    max_offered = val
+            
+            # Compare annual salaries
+            if max_offered > 1000:
+                if max_offered >= min_salary:
+                    salary_score = 10
+                    salary_match = True
+                else:
+                    salary_score = -20  # Strong penalty for paying below expectations
+                    salary_match = False
     score += salary_score
 
     # --- Job Recency (0–5 points) ---

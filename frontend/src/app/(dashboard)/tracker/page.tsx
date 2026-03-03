@@ -24,11 +24,11 @@ type Application = {
 };
 
 const COLUMNS = [
-    { id: 'pending', title: 'Saved' },
-    { id: 'applied', title: 'Applied' },
-    { id: 'interview', title: 'Interviewing' },
-    { id: 'offer', title: 'Offered' },
-    { id: 'rejected', title: 'Rejected' }
+    { id: 'pending', title: 'Saved', color: 'slate' },
+    { id: 'applied', title: 'Applied', color: 'amber' },
+    { id: 'interview', title: 'Interviewing', color: 'blue' },
+    { id: 'offer', title: 'Offered', color: 'emerald' },
+    { id: 'rejected', title: 'Rejected', color: 'rose' }
 ];
 
 // --- SORTABLE CARD COMPONENT ---
@@ -45,19 +45,24 @@ function SortableCard({ app }: { app: Application }) {
         <div
             ref={setNodeRef}
             style={style}
-            className={`bg-white border p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-primary-500 border-primary-500 z-50' : 'border-slate-200'}`}
+            className={`bg-white border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-primary-500 border-primary-500 z-50 scale-105 shadow-xl rotate-2' : 'border-slate-200 hover:border-slate-300'}`}
         >
-            <div
-                {...attributes}
-                {...listeners}
-                className="absolute top-4 right-3 text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-                <GripVertical className="w-5 h-5" />
+            <div className="flex items-start justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center flex-shrink-0 shadow-inner">
+                    <span className="font-bold text-slate-500 text-lg uppercase">{app.job.company.charAt(0)}</span>
+                </div>
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-grab active:cursor-grabbing transition-colors"
+                >
+                    <GripVertical className="w-4 h-4" />
+                </div>
             </div>
 
-            <h3 className="font-bold text-slate-800 text-sm leading-tight pr-6">{app.job.role}</h3>
+            <h3 className="font-bold text-slate-800 text-sm leading-tight mb-2 line-clamp-2">{app.job.role}</h3>
 
-            <div className="mt-3 space-y-1.5">
+            <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                     <Building2 className="w-3.5 h-3.5 text-slate-400" />
                     <span className="truncate">{app.job.company}</span>
@@ -68,7 +73,7 @@ function SortableCard({ app }: { app: Application }) {
                 </div>
 
                 {app.job.salary && (
-                    <div className="mt-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
+                    <div className="mt-3 inline-flex items-center px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider bg-green-50 text-green-700 border border-green-200">
                         {app.job.salary}
                     </div>
                 )}
@@ -79,28 +84,41 @@ function SortableCard({ app }: { app: Application }) {
 
 
 // --- KANBAN COLUMN COMPONENT ---
-function KanbanColumn({ id, title, applications }: { id: string, title: string, applications: Application[] }) {
+function KanbanColumn({ id, title, color, applications }: { id: string, title: string, color: string, applications: Application[] }) {
     const { setNodeRef, isOver } = useDroppable({ id });
+
+    const colorMap: Record<string, { bg: string, border: string, text: string, grad: string, over: string, dropBorder: string, dropText: string }> = {
+        slate: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', grad: 'from-slate-400 to-slate-500', over: 'border-slate-400 shadow-slate-200 backdrop-blur-sm bg-slate-100/80 shadow-inner', dropBorder: 'border-slate-300', dropText: 'text-slate-500' },
+        amber: { bg: 'bg-amber-50/50', border: 'border-amber-200', text: 'text-amber-800', grad: 'from-amber-400 to-amber-500', over: 'border-amber-400 shadow-amber-200 backdrop-blur-sm bg-amber-50 shadow-inner', dropBorder: 'border-amber-300', dropText: 'text-amber-500' },
+        blue: { bg: 'bg-blue-50/50', border: 'border-blue-200', text: 'text-blue-800', grad: 'from-blue-400 to-blue-500', over: 'border-blue-400 shadow-blue-200 backdrop-blur-sm bg-blue-50 shadow-inner', dropBorder: 'border-blue-300', dropText: 'text-blue-500' },
+        emerald: { bg: 'bg-emerald-50/50', border: 'border-emerald-200', text: 'text-emerald-800', grad: 'from-emerald-400 to-emerald-500', over: 'border-emerald-400 shadow-emerald-200 backdrop-blur-sm bg-emerald-50 shadow-inner', dropBorder: 'border-emerald-300', dropText: 'text-emerald-500' },
+        rose: { bg: 'bg-rose-50/50', border: 'border-rose-200', text: 'text-rose-800', grad: 'from-rose-400 to-rose-500', over: 'border-rose-400 shadow-rose-200 backdrop-blur-sm bg-rose-50 shadow-inner', dropBorder: 'border-rose-300', dropText: 'text-rose-500' }
+    };
+
+    const c = colorMap[color] || colorMap.slate;
 
     return (
         <div
             ref={setNodeRef}
-            className={`flex flex-col bg-slate-100/50 border rounded-2xl w-[320px] min-w-[320px] flex-shrink-0 transition-colors ${isOver ? 'bg-slate-200 border-primary-300' : 'border-slate-200'}`}
+            className={`flex flex-col rounded-3xl w-[320px] min-w-[320px] flex-shrink-0 transition-all duration-300 border-2 ${isOver ? c.over + ' scale-[1.02]' : `${c.bg} ${c.border}`}`}
         >
-            <div className="p-4 border-b border-slate-200/60 bg-white/50 rounded-t-2xl flex items-center justify-between sticky top-0 backdrop-blur-sm z-10">
-                <h2 className="font-bold text-slate-800 text-sm">{title}</h2>
-                <span className="bg-slate-200 text-slate-600 text-xs font-bold px-2.5 py-1 rounded-full">{applications.length}</span>
+            <div className={`p-4 border-b rounded-t-3xl flex items-center justify-between sticky top-0 z-10 ${c.border} bg-white/50 backdrop-blur-md`}>
+                <div className="flex items-center gap-2.5">
+                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${c.grad} shadow-sm ring-2 ring-white`}></div>
+                    <h2 className={`font-bold text-sm ${c.text}`}>{title}</h2>
+                </div>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg bg-white shadow-sm border ${c.border} ${c.text}`}>{applications.length}</span>
             </div>
 
-            <div className="p-3 flex-1 overflow-y-auto space-y-3 min-h-[150px]">
+            <div className={`p-3 flex-1 overflow-y-auto space-y-3 min-h-[150px] rounded-b-3xl ${isOver ? 'bg-transparent' : 'bg-transparent'}`}>
                 <SortableContext items={applications.map(a => a.id)} strategy={verticalListSortingStrategy}>
                     {applications.map(app => (
                         <SortableCard key={app.id} app={app} />
                     ))}
                 </SortableContext>
                 {applications.length === 0 && (
-                    <div className="h-full flex items-center justify-center p-8 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm font-medium text-center">
-                        Drop items here
+                    <div className={`h-full flex items-center justify-center p-8 border-2 border-dashed rounded-xl text-sm font-medium text-center transition-colors ${isOver ? `${c.dropBorder} ${c.dropText} bg-white/50` : 'border-slate-200/50 text-slate-400'}`}>
+                        Drop jobs here
                     </div>
                 )}
             </div>
@@ -244,6 +262,7 @@ export default function TrackerPage() {
                                 <KanbanColumn
                                     id={col.id}
                                     title={col.title}
+                                    color={col.color}
                                     applications={applications.filter(a => a.status === col.id)}
                                 />
                             </div>

@@ -25,6 +25,9 @@ export default function SettingsPage() {
     // Job preferences (synced from profile)
     const [remotePreference, setRemotePreference] = useState('any');
     const [minSalary, setMinSalary] = useState('');
+    const [experienceLevel, setExperienceLevel] = useState('fresher');
+    const [preferredRoles, setPreferredRoles] = useState('');
+    const [preferredLocations, setPreferredLocations] = useState('');
     const [targetCompanies, setTargetCompanies] = useState('');
     const [jobPrefSaving, setJobPrefSaving] = useState(false);
     const [jobPrefMsg, setJobPrefMsg] = useState({ text: '', type: '' });
@@ -42,6 +45,9 @@ export default function SettingsPage() {
                     setRemotePreference(data.remote_preference || 'any');
                     setMinSalary(data.min_salary ? String(data.min_salary) : '');
                     setTargetCompanies((data.target_companies || []).join(', '));
+                    setExperienceLevel(data.experience_level || 'fresher');
+                    setPreferredRoles((data.preferred_roles || []).join(', '));
+                    setPreferredLocations((data.preferred_locations || []).join(', '));
                 }
             })
             .catch(() => { });
@@ -74,6 +80,9 @@ export default function SettingsPage() {
                     remote_preference: remotePreference,
                     min_salary: minSalary ? parseInt(minSalary) : null,
                     target_companies: targetCompanies.split(',').map(s => s.trim()).filter(Boolean),
+                    experience_level: experienceLevel,
+                    preferred_roles: preferredRoles.split(',').map(s => s.trim()).filter(Boolean),
+                    preferred_locations: preferredLocations.split(',').map(s => s.trim()).filter(Boolean),
                 }),
             });
             if (res.ok) {
@@ -361,25 +370,54 @@ export default function SettingsPage() {
                             </div>
                         </div>
 
-                        {/* Min Salary */}
+                        {/* Experience Level */}
                         <div className="space-y-2">
-                            <label className="block text-sm font-medium text-slate-700">
-                                Minimum Salary ({CURRENCY_SYMBOLS[settings.currency]})
-                            </label>
-                            <input type="number" value={minSalary} onChange={e => setMinSalary(e.target.value)}
-                                placeholder="e.g. 500000"
-                                className="w-full max-w-xs px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
-                            <p className="text-xs text-slate-400">Leave blank to not filter by salary.</p>
+                            <label className="block text-sm font-medium text-slate-700">Experience Level</label>
+                            <select value={experienceLevel} onChange={e => setExperienceLevel(e.target.value)}
+                                className="w-full max-w-xs px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                                <option value="fresher">Fresher (0-1 years)</option>
+                                <option value="junior">Junior (1-3 years)</option>
+                                <option value="mid">Mid-Level (3-5 years)</option>
+                                <option value="senior">Senior (5+ years)</option>
+                                <option value="lead">Lead / Staff</option>
+                            </select>
                         </div>
 
-                        {/* Target Companies */}
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-slate-700">Target Companies</label>
-                            <textarea value={targetCompanies} onChange={e => setTargetCompanies(e.target.value)}
-                                placeholder="Google, Microsoft, Flipkart, Razorpay..."
-                                rows={2}
-                                className="w-full px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
-                            <p className="text-xs text-slate-400">Comma-separated. Jobs from these companies will get a scoring boost.</p>
+                        {/* Preferred Roles & Locations */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700">Preferred Roles (comma separated)</label>
+                                <input type="text" value={preferredRoles} onChange={e => setPreferredRoles(e.target.value)}
+                                    placeholder="Frontend Engineer, PM..."
+                                    className="w-full px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700">Preferred Locations (comma separated)</label>
+                                <input type="text" value={preferredLocations} onChange={e => setPreferredLocations(e.target.value)}
+                                    placeholder="New York, Remote, London..."
+                                    className="w-full px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+                            </div>
+                        </div>
+
+                        {/* Min Salary & Target Companies */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700">
+                                    Minimum Salary ({CURRENCY_SYMBOLS[settings.currency]})
+                                </label>
+                                <input type="number" value={minSalary} onChange={e => setMinSalary(e.target.value)}
+                                    placeholder="e.g. 500000"
+                                    className="w-full px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+                                <p className="text-xs text-slate-400">Leave blank to not filter by salary.</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700">Target Companies</label>
+                                <input type="text" value={targetCompanies} onChange={e => setTargetCompanies(e.target.value)}
+                                    placeholder="Google, Microsoft..."
+                                    className="w-full px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+                                <p className="text-xs text-slate-400">Comma separated company names.</p>
+                            </div>
                         </div>
 
                         <button onClick={handleSaveJobPrefs} disabled={jobPrefSaving}
@@ -450,6 +488,6 @@ export default function SettingsPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }

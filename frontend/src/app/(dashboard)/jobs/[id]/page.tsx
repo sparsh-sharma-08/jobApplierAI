@@ -435,11 +435,11 @@ export default function JobDetailsPage() {
                                         <CheckCircle2 className="w-5 h-5" />
                                         <span className="font-semibold">Tailored Resume Ready</span>
                                         <div className="ml-auto flex gap-2">
-                                            <a href={`http://127.0.0.1:8000/${resumeUrl}`} target="_blank" rel="noopener noreferrer"
+                                            <a href={resumeUrl.startsWith('/') ? `${API}${resumeUrl}` : `${API}/download/${encodeURIComponent(resumeUrl)}`} target="_blank" rel="noopener noreferrer"
                                                 className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-2">
                                                 <Eye className="w-3.5 h-3.5" /> Preview PDF
                                             </a>
-                                            <a href={`http://127.0.0.1:8000/${resumeUrl}`} download
+                                            <a href={resumeUrl.startsWith('/') ? `${API}${resumeUrl}` : `${API}/download/${encodeURIComponent(resumeUrl)}`} download
                                                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-2 transition-colors">
                                                 <Download className="w-3.5 h-3.5" /> Download
                                             </a>

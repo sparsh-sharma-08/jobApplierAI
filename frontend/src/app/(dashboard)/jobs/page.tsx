@@ -66,6 +66,7 @@ export default function JobsPage() {
     const [sourceFilter, setSourceFilter] = useState('all');
     const [sortBy, setSortBy] = useState<'score' | 'date'>(settings.defaultSort);
     const [isFetching, setIsFetching] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
     const [generatingResumeFor, setGeneratingResumeFor] = useState<number | null>(null);
     const [jobResumes, setJobResumes] = useState<Record<number, string>>({});
     const [jobCoverLetters, setJobCoverLetters] = useState<Record<number, string>>({});
@@ -365,6 +366,15 @@ export default function JobsPage() {
         });
     }, [jobs, searchQuery, sourceFilter, sortBy]);
 
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, sourceFilter, sortBy]);
+
+    const jobsPerPage = settings.jobsPerPage || 10;
+    const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / jobsPerPage));
+    const paginatedJobs = useMemo(() => {
+        const start = (currentPage - 1) * jobsPerPage;
+        return filteredAndSorted.slice(start, start + jobsPerPage);
+    }, [filteredAndSorted, currentPage, jobsPerPage]);
+
     if (loading) {
         return (
             <div className="space-y-4">
@@ -431,7 +441,7 @@ export default function JobsPage() {
                 />
             ) : (
                 <div className="space-y-4">
-                    {filteredAndSorted.map(job => {
+                    {paginatedJobs.map(job => {
                         const isExpanded = expandedJob === job.id;
                         const score = job.score?.score || 0;
                         const matchedSkills = job.score?.explanation?.matched_skills || [];
@@ -747,6 +757,39 @@ export default function JobsPage() {
                             </motion.div>
                         );
                     })}
+                </div>
+            )}
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-6 border-t border-slate-200 mt-6 pb-8">
+                    <p className="text-sm text-slate-500 font-medium">
+                        Showing <span className="text-slate-900 font-bold">{(currentPage - 1) * jobsPerPage + 1}</span> to{' '}
+                        <span className="text-slate-900 font-bold">{Math.min(currentPage * jobsPerPage, filteredAndSorted.length)}</span> of{' '}
+                        <span className="text-slate-900 font-bold">{filteredAndSorted.length}</span> results
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            disabled={currentPage === 1}
+                            onClick={() => {
+                                setCurrentPage(p => Math.max(1, p - 1));
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="px-4 py-2 border border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed"
+                        >
+                            Previous
+                        </button>
+                        <button
+                            disabled={currentPage === totalPages}
+                            onClick={() => {
+                                setCurrentPage(p => Math.min(totalPages, p + 1));
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="px-4 py-2 border border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

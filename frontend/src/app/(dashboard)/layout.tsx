@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, Briefcase, UserCircle, Settings, LogOut, Sparkles, KanbanSquare } from 'lucide-react';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { apiFetch } from '@/lib/api';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -25,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!token) { router.push('/'); return; }
 
         // Try to get user profile
-        fetch(`${API}/profile`, { headers: { Authorization: `Bearer ${token}` } })
+        apiFetch(`${API}/profile`)
             .then(res => {
                 if (res.status === 401) throw new Error('unauthorized');
                 return res.json();
@@ -52,9 +54,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!user) return null;
 
     return (
-        <div className="min-h-screen flex">
+        <div className="h-screen flex overflow-hidden bg-slate-50">
             {/* Sidebar */}
-            <aside className="hidden md:flex md:flex-col md:w-64 bg-gradient-to-b from-slate-900 via-primary-950 to-slate-900 text-white shadow-2xl">
+            <aside className="hidden md:flex md:flex-col md:w-64 bg-gradient-to-b from-slate-900 via-primary-950 to-slate-900 text-white shadow-2xl flex-shrink-0 z-20">
                 <div className="p-6 border-b border-white/10">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-400 to-secondary-400 flex items-center justify-center shadow-lg animate-float">
@@ -67,7 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </div>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-1">
+                <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
                     {navItems.map(item => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                         return (
@@ -91,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <Sparkles className="w-4 h-4 text-primary-300 animate-pulse" />
                         <span className="text-xs font-semibold text-primary-200 uppercase tracking-wider">AI Engine Active</span>
                     </div>
-                    <p className="text-xs text-slate-400">Gemma 3 ready for resume & scoring</p>
+                    <p className="text-xs text-slate-400">Gemma 3 ready</p>
                 </div>
 
                 {/* User + Logout */}
@@ -113,8 +115,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 p-6 md:p-8 overflow-auto">
-                {children}
+            <main className="flex-1 p-6 md:p-8 overflow-y-auto relative z-10">
+                <ErrorBoundary fallbackMessage="The dashboard component failed to load. Please try refreshing.">
+                    {children}
+                </ErrorBoundary>
             </main>
         </div>
     );

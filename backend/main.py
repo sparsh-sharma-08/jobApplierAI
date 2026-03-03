@@ -17,14 +17,14 @@ import fitz # PyMuPDF
 
 from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application, MockInterview, ColdEmail
 from models.schemas import (
-    UserCreate, UserOut, Token,
+    UserCreate, UserOut, Token, TokenRefreshRequest,
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
     MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate
 )
 from core.security import (
-    get_password_hash, verify_password, create_access_token, 
-    get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES
+    get_password_hash, verify_password, create_access_token, create_refresh_token,
+    get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
 )
 from core.helpers import profile_to_dict
 from services.scorer import score_job, batch_score_jobs
@@ -35,14 +35,24 @@ from scrapers.job_scraper import JobScrapeManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="AI Career Copilot", version="1.0.0")
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Configure CORS
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000"
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -142,7 +152,39 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token}
+
+
+from jose import JWTError, jwt
+
+@app.post("/auth/refresh", response_model=Token)
+def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(request.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        if email is None or token_type != "refresh":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+        
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    new_refresh_token = create_refresh_token(data={"sub": user.email})
+    
+    return {"access_token": access_token, "token_type": "bearer", "refresh_token": new_refresh_token}
 
 
 # ─────────────────────────────────────────
@@ -336,8 +378,10 @@ def score_all_jobs(
 # ─────────────────────────────────────────
 
 @app.post("/resumes/generate/{job_id}")
+@limiter.limit("5/minute")
 def generate_resume_for_job(
     job_id: int, 
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -593,8 +637,10 @@ def trigger_application(
 # ─────────────────────────────────────────
 
 @app.post("/jobs/{job_id}/interview", response_model=MockInterviewOut)
+@limiter.limit("5/minute")
 def create_mock_interview(
     job_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -645,8 +691,10 @@ def update_mock_interview(
 
 
 @app.post("/jobs/{job_id}/cold-email", response_model=ColdEmailOut)
+@limiter.limit("5/minute")
 def create_cold_email(
     job_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
