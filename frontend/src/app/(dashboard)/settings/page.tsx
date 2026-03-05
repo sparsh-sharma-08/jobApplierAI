@@ -225,7 +225,6 @@ export default function SettingsPage() {
                         {/* Toggles */}
                         <div className="space-y-3 pt-2">
                             {[
-                                { key: 'compactView' as const, label: 'Compact View', desc: 'Show more jobs with smaller cards', icon: Eye },
                                 { key: 'showScoreBadges' as const, label: 'Score Badges', desc: 'Show colored match score badges on job cards', icon: BarChart3 },
                                 { key: 'highlightNewJobs' as const, label: 'Highlight New Jobs', desc: 'Add a visual indicator for recently fetched jobs', icon: Bell },
                                 { key: 'autoDownloadResume' as const, label: 'Auto-Download Resume', desc: 'Automatically download PDF when resume is generated', icon: Download },

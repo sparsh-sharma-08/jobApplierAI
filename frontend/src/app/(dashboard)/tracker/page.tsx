@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor, useSensor, useSensors, DragStartEvent, DragOverEvent, DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Briefcase, Building2, MapPin, Loader2, GripVertical, CheckCircle2 } from 'lucide-react';
+import { Briefcase, Building2, MapPin, Loader2, GripVertical, CheckCircle2, Plus, Search, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import LLMProgressBar from '@/components/LLMProgressBar';
@@ -133,6 +133,49 @@ export default function TrackerPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [activeId, setActiveId] = useState<number | null>(null);
 
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+    const [jobSearch, setJobSearch] = useState('');
+    const [isAddingJob, setIsAddingJob] = useState(false);
+
+    useEffect(() => {
+        if (!showAddModal) return;
+        const fetchPendingJobs = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            try {
+                const res = await fetch(`${API}/jobs?limit=250`, { headers: { Authorization: `Bearer ${token}` } });
+                if (res.ok) {
+                    const data = await res.json();
+                    const existingJobIds = new Set(applications.map(a => a.job_id));
+                    setAvailableJobs(data.filter((j: any) => !existingJobIds.has(j.id)));
+                }
+            } catch (e) { console.error(e); }
+        };
+        fetchPendingJobs();
+    }, [showAddModal, applications]);
+
+    const handleAddJobToTracker = async (jobId: number) => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        setIsAddingJob(true);
+        try {
+            const res = await fetch(`${API}/applications`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId })
+            });
+            if (res.ok) {
+                toast.success('Job added to tracker!');
+                fetchApps();
+                setShowAddModal(false);
+            } else {
+                toast.error('Failed to add job to tracker.');
+            }
+        } catch { toast.error('Network error.'); }
+        setIsAddingJob(false);
+    };
+
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -245,6 +288,12 @@ export default function TrackerPage() {
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">Manage your job search pipeline via drag-and-drop.</p>
                 </div>
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className="btn-primary px-5 py-2.5 text-sm flex items-center gap-2"
+                >
+                    <Plus className="w-4 h-4" /> Add Application
+                </button>
             </div>
 
             <div className="flex-1 overflow-x-auto pb-6">
@@ -278,6 +327,57 @@ export default function TrackerPage() {
                     </DndContext>
                 </div>
             </div>
+
+            {/* Quick Add Modal */}
+            <AnimatePresence>
+                {showAddModal && (
+                    <>
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50" onClick={() => setShowAddModal(false)} />
+                        <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl bg-white rounded-2xl shadow-2xl z-50 flex flex-col max-h-[80vh] overflow-hidden">
+                            <div className="p-5 border-b flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-slate-900">Add to Tracker</h2>
+                                <button onClick={() => setShowAddModal(false)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-5 border-b bg-slate-50/50">
+                                <div className="relative">
+                                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                                    <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                                        placeholder="Search fetched jobs by role or company..." />
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                                {availableJobs
+                                    .filter(j => j.role.toLowerCase().includes(jobSearch.toLowerCase()) || j.company.toLowerCase().includes(jobSearch.toLowerCase()))
+                                    .slice(0, 50).map(job => (
+                                        <div key={job.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-300 transition-colors flex items-center justify-between group">
+                                            <div className="min-w-0 pr-4">
+                                                <h3 className="font-semibold text-slate-900 truncate">{job.role}</h3>
+                                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                                    <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{job.company}</span>
+                                                    <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.location || 'Remote'}</span>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => handleAddJobToTracker(job.id)} disabled={isAddingJob}
+                                                className="opacity-0 group-hover:opacity-100 btn-secondary px-3 py-1.5 text-xs flex-shrink-0 transition-opacity disabled:opacity-50">
+                                                Add Job
+                                            </button>
+                                        </div>
+                                    ))}
+                                {availableJobs.length === 0 && (
+                                    <div className="text-center p-8 text-slate-500 text-sm">
+                                        No un-tracked jobs available. Go to Pipeline to fetch more.
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

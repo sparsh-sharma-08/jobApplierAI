@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Search, Briefcase, MapPin, Building2, ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, XCircle, FileText, Download, Eye, FileSignature, Copy, CheckCheck, Edit3, Save, X, MessageSquare, Mail } from 'lucide-react';
+import { Search, Briefcase, MapPin, Building2, ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, XCircle, FileText, Download, Eye, FileSignature, Copy, CheckCheck, Edit3, Save, X, MessageSquare, Mail, Trash2, Link, Plus } from 'lucide-react';
 import LLMProgressBar from '@/components/LLMProgressBar';
 import SkeletonCard from '@/components/SkeletonCard';
 import EmptyState from '@/components/EmptyState';
@@ -63,9 +63,17 @@ export default function JobsPage() {
     const [loading, setLoading] = useState(true);
     const [expandedJob, setExpandedJob] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [sourceFilter, setSourceFilter] = useState('all');
-    const [sortBy, setSortBy] = useState<'score' | 'date'>(settings.defaultSort);
+    const [sourceFilter, setSourceFilter] = useState<string>('all');
+    const [sortBy, setSortBy] = useState<'score' | 'date'>('score');
+
+    useEffect(() => {
+        if (settings && settings.defaultSort) {
+            setSortBy(settings.defaultSort);
+        }
+    }, [settings.defaultSort]);
     const [isFetching, setIsFetching] = useState(false);
+    const [pastingUrl, setPastingUrl] = useState('');
+    const [isPasting, setIsPasting] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [generatingResumeFor, setGeneratingResumeFor] = useState<number | null>(null);
     const [jobResumes, setJobResumes] = useState<Record<number, string>>({});
@@ -176,6 +184,63 @@ export default function JobsPage() {
         }
     };
 
+    const handleClearJobs = async () => {
+        const token = getToken();
+        if (!token) return;
+        if (!confirm('Are you sure you want to clear all unapplied jobs? This action cannot be undone.')) return;
+
+        try {
+            const res = await fetch(`${API}/jobs/clear`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                toast.success(data.message || 'Successfully cleared unapplied jobs!');
+                fetchJobs(); // Refresh the list
+            } else {
+                toast.error('Failed to clear jobs.');
+            }
+        } catch {
+            toast.error('Network error while clearing jobs.');
+        }
+    };
+
+    const handleParseUrl = async () => {
+        if (!pastingUrl.trim()) return;
+        const token = getToken();
+        if (!token) return;
+
+        try {
+            new URL(pastingUrl); // Basic validation
+        } catch {
+            toast.error("Please enter a valid URL");
+            return;
+        }
+
+        setIsPasting(true);
+        try {
+            const res = await fetch(`${API}/jobs/parse-url`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: pastingUrl.trim() })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                toast.success('Job parsed, scored, and added to pipeline!');
+                setPastingUrl('');
+                fetchJobs(); // Refresh jobs
+            } else {
+                toast.error(data.detail || 'Failed to parse job from URL.');
+            }
+        } catch {
+            toast.error('Network error during parsing.');
+        } finally {
+            setIsPasting(false);
+        }
+    };
+
     const handleMarkApplied = async (jobId: number) => {
         const token = getToken();
         if (!token) return;
@@ -234,6 +299,10 @@ export default function JobsPage() {
                 const data = await res.json();
                 if (data.file_path_pdf) {
                     setJobResumes(prev => ({ ...prev, [jobId]: data.file_path_pdf }));
+                    if (settings.autoDownloadResume) {
+                        const dlUrl = data.file_path_pdf.startsWith('/resumes/') ? `${API}${data.file_path_pdf}` : `${API}/download/${encodeURIComponent(data.file_path_pdf)}`;
+                        window.open(dlUrl, '_blank');
+                    }
                 }
                 if (data.cover_letter) {
                     setJobCoverLetters(prev => ({ ...prev, [jobId]: data.cover_letter }));
@@ -399,14 +468,39 @@ export default function JobsPage() {
                         {filteredAndSorted.length} jobs found · AI-scored and ranked by match quality
                     </p>
                 </div>
-                <button onClick={handleFetch} disabled={isFetching}
-                    className="btn-primary px-5 py-2.5 text-sm flex items-center gap-2 disabled:opacity-70 hover:scale-[1.02]">
-                    {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {isFetching ? 'Scanning...' : 'Fetch New Jobs'}
-                </button>
+                <div className="flex gap-3">
+                    <button onClick={handleClearJobs}
+                        className="btn-secondary px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                        Clear Jobs
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={pastingUrl}
+                                onChange={e => setPastingUrl(e.target.value)}
+                                placeholder="Paste job URL..."
+                                className="w-48 pl-9 pr-3 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all focus:w-64"
+                            />
+                            <Link className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                        </div>
+                        <button onClick={handleParseUrl} disabled={isPasting || !pastingUrl.trim()}
+                            className="btn-primary px-4 py-2.5 text-sm flex items-center gap-2 disabled:opacity-70 hover:scale-[1.02] shadow-sm whitespace-nowrap">
+                            {isPasting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {isPasting ? 'Parsing...' : 'Add Job'}
+                        </button>
+                    </div>
+
+                    <button onClick={handleFetch} disabled={isFetching}
+                        className="btn-primary px-5 py-2.5 text-sm flex items-center gap-2 disabled:opacity-70 hover:scale-[1.02] bg-slate-900 border-slate-900 shadow-sm text-white">
+                        {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        {isFetching ? 'Scanning...' : 'Auto Fetch'}
+                    </button>
+                </div>
             </div>
 
-            {isFetching && <LLMProgressBar text="Scanning job portals for new opportunities..." />}
+            {(isFetching || isPasting) && <LLMProgressBar text={isPasting ? "Extracting context via LLM..." : "Scanning job portals for new opportunities..."} />}
 
             {/* Filters */}
             <div className="flex flex-wrap gap-3 items-center">
@@ -451,6 +545,8 @@ export default function JobsPage() {
                         const isGenerating = generatingResumeFor === job.id;
                         const isEditingCL = editingCoverLetter === job.id;
 
+                        const isNewJob = settings.highlightNewJobs && new Date(job.posted_date).getTime() > Date.now() - 3 * 24 * 60 * 60 * 1000;
+
                         return (
                             <motion.div
                                 layout
@@ -458,13 +554,15 @@ export default function JobsPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 key={job.id}
                                 onClick={() => setExpandedJob(isExpanded ? null : job.id)}
-                                className="glass-card overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
+                                className={`glass-card overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer ${isNewJob ? 'ring-2 ring-primary-400/50 bg-primary-50/10' : ''}`}
                             >
                                 <div className="p-5 flex gap-4">
                                     {/* Score Badge */}
-                                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${getScoreColor(score)} flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                                        <span className="text-white font-bold text-lg">{score}</span>
-                                    </div>
+                                    {settings.showScoreBadges && (
+                                        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${getScoreColor(score)} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                                            <span className="text-white font-bold text-lg">{score}</span>
+                                        </div>
+                                    )}
 
                                     {/* Job Info */}
                                     <div className="flex-1 min-w-0">

@@ -61,13 +61,19 @@ def score_job(
     keyword_score = min(20, int((len(keyword_overlap) / max(len(jd_keywords), 1)) * 100))
     score += keyword_score
 
-    # Find important missing keywords (tech terms in JD not in candidate profile)
-    tech_indicators = ['python', 'java', 'javascript', 'typescript', 'react', 'node', 'aws', 'docker',
-                       'kubernetes', 'sql', 'nosql', 'mongodb', 'postgres', 'redis', 'kafka', 'go', 'rust',
-                       'swift', 'kotlin', 'flutter', 'django', 'flask', 'fastapi', 'spring', 'angular', 'vue',
-                       'graphql', 'rest', 'api', 'ci', 'cd', 'git', 'linux', 'ml', 'ai', 'tensorflow', 'pytorch']
-    for kw in tech_indicators:
-        if kw in full_text and kw not in candidate_skills_set:
+    # Find truly missing tech skills dynamically from the job description
+    try:
+        from services.llm_service import TECH_KEYWORDS
+        all_tech = TECH_KEYWORDS
+    except ImportError:
+        all_tech = {'python', 'java', 'javascript', 'typescript', 'react', 'node', 'aws', 'docker',
+                    'kubernetes', 'sql', 'nosql', 'mongodb', 'postgres', 'redis', 'kafka', 'go', 'rust',
+                    'swift', 'kotlin', 'flutter', 'django', 'flask', 'fastapi', 'spring', 'angular', 'vue',
+                    'graphql', 'rest', 'api', 'ci', 'cd', 'git', 'linux', 'ml', 'ai', 'tensorflow', 'pytorch'}
+        
+    for kw in all_tech:
+        # If the term is explicitly mentioned in the job role/description but is completely missing from user skills
+        if kw in full_text and not any(kw == s or kw in s for s in candidate_skills):
             missing_keywords.append(kw)
 
     # --- Experience Compatibility (0–20 points) ---

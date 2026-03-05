@@ -20,6 +20,7 @@ from models.schemas import (
     UserCreate, UserOut, Token, TokenRefreshRequest,
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
+    UrlInput,
     MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate
 )
 from core.security import (
@@ -303,6 +304,30 @@ def list_jobs(
     return query.order_by(Job.fetched_date.desc()).offset(offset).limit(limit).all()
 
 
+@app.delete("/jobs/clear")
+def clear_unapplied_jobs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Find jobs that do not have any applications
+    unapplied_jobs = db.query(Job).filter(
+        Job.user_id == current_user.id,
+        ~Job.applications.any()
+    ).all()
+    
+    count = 0
+    for job in unapplied_jobs:
+        # Related JobScore and Resumes will be cascade-deleted if configured, or we can manually delete them
+        # SQLite with SQLAlchemy sometimes needs manual cleanup if cascade is not set
+        db.query(JobScore).filter(JobScore.job_id == job.id).delete(synchronize_session=False)
+        db.query(Resume).filter(Resume.job_id == job.id).delete(synchronize_session=False)
+        db.delete(job)
+        count += 1
+        
+    db.commit()
+    return {"message": f"Successfully cleared {count} unapplied fetched jobs.", "deleted_count": count}
+
+
 @app.get("/jobs/{job_id}", response_model=JobOut)
 def get_job(
     job_id: int, 
@@ -326,9 +351,23 @@ def fetch_jobs(
         raise HTTPException(400, "Please set up your profile first")
 
     sources_to_fetch = sources or ["remotive"]
-    roles = profile.preferred_roles or ["software engineer"]
+    base_roles = profile.preferred_roles or ["software engineer"]
     locations = profile.preferred_locations or []
     
+    # Intelligent Scraping Keywords: Combine top roles with top skills
+    roles = []
+    for r in base_roles:
+        roles.append(r)
+    
+    if profile.skills:
+        top_skills = profile.skills[:3]
+        for r in base_roles[:2]:
+            for s in top_skills:
+                roles.append(f"{s} {r}")
+                
+    # Deduplicate while preserving order
+    roles = list(dict.fromkeys(roles))
+
     # Needs to be extracted into Celery, but passing user_id to background thread for now
     user_id = current_user.id
     profile_dict = profile_to_dict(profile)
@@ -338,9 +377,72 @@ def fetch_jobs(
     task = fetch_and_score_jobs_task.delay(user_id, profile_dict, sources_to_fetch, roles, locations)
     
     return {
-        "message": "Fetching jobs in background", 
+        "message": "Fetching jobs intelligently in background", 
         "task_id": task.id
     }
+
+
+@app.post("/jobs/parse-url", response_model=JobOut)
+def parse_job_url(
+    payload: UrlInput,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=400, detail="Please set up your profile first")
+
+    # Parse URL
+    from scrapers.url_parser import UrlParserScraper
+    scraper = UrlParserScraper()
+    job_data = scraper.parse_url(payload.url)
+    
+    if not job_data:
+        raise HTTPException(status_code=400, detail="Could not extract job from that URL. Please check the link and try again.")
+        
+    # Check if we already scraped this exact URL manually
+    existing_job = db.query(Job).filter(
+        Job.user_id == current_user.id,
+        Job.apply_link == payload.url
+    ).first()
+    
+    if existing_job:
+        raise HTTPException(status_code=409, detail="You have already added this job to your tracker.")
+
+    # Score it!
+    from services.scorer import score_job
+    profile_dict = profile_to_dict(profile)
+    score_result = score_job(job_data, profile_dict)
+    
+    # Save the DB
+    new_job = Job(
+        external_id=job_data["external_id"],
+        source=job_data["source"],
+        user_id=current_user.id,
+        company=job_data["company"],
+        role=job_data["role"],
+        location=job_data["location"],
+        salary=job_data.get("salary", ""),
+        description=job_data["description"],
+        apply_link=job_data["apply_link"],
+        fetched_date=datetime.utcnow()
+    )
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job)
+    
+    # Save Score
+    new_score = JobScore(
+        job_id=new_job.id,
+        score=score_result["score"],
+        explanation=score_result["explanation"]
+    )
+    db.add(new_score)
+    db.commit()
+    
+    # Refresh to include relations
+    db.refresh(new_job)
+    return new_job
 
 
 @app.post("/jobs/score-all")

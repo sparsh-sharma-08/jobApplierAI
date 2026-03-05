@@ -22,12 +22,21 @@ celery_app = Celery(
     backend=REDIS_URL
 )
 
+from celery.schedules import crontab
+
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        'clean-old-jobs-weekly': {
+            'task': 'clean_old_jobs_task',
+            'schedule': crontab(day_of_week='sun', hour=0, minute=0),
+            'args': (15,)
+        },
+    }
 )
 
 @celery_app.task(name="fetch_and_score_jobs_task")
@@ -42,6 +51,12 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
         for job_data in jobs_data:
             existing = db.query(Job).filter(Job.user_id == user_id, Job.external_id == job_data["external_id"]).first()
             if existing: continue
+
+            score_result = score_job(job_data, profile_dict)
+            
+            # 40% Match Threshold Filter
+            if score_result["score"] < 40:
+                continue
 
             posted_date = None
             if job_data.get("posted_date"):
@@ -64,11 +79,10 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
             db.add(job)
             db.flush()
 
-            score_result = score_job(job_data, profile_dict)
             db.add(JobScore(job_id=job.id, score=score_result["score"], explanation=score_result["explanation"]))
             new_count += 1
+            db.commit()
 
-        db.commit()
         return {"user_id": user_id, "new_jobs": new_count}
     except Exception as e:
         db.rollback()
@@ -161,5 +175,34 @@ def trigger_application_task(app_id: int, user_id: int, mode: str):
     except Exception as e:
         db.rollback()
         raise e
+    finally:
+        db.close()
+
+
+from datetime import timedelta
+@celery_app.task(name="clean_old_jobs_task")
+def clean_old_jobs_task(days_old: int = 15):
+    logger.info(f"Starting clean_old_jobs_task for jobs older than {days_old} days")
+    db: Session = SessionLocal()
+    try:
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+        old_jobs = db.query(Job).filter(
+            Job.fetched_date < cutoff_date,
+            ~Job.applications.any()
+        ).all()
+        
+        count = 0
+        for job in old_jobs:
+            db.query(JobScore).filter(JobScore.job_id == job.id).delete(synchronize_session=False)
+            db.query(Resume).filter(Resume.job_id == job.id).delete(synchronize_session=False)
+            db.delete(job)
+            count += 1
+            
+        db.commit()
+        logger.info(f"Cleaned {count} old jobs.")
+        return {"cleaned_jobs": count}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error cleaning old jobs: {e}")
     finally:
         db.close()

@@ -103,6 +103,9 @@ class JobScoreOut(BaseModel):
     class Config:
         from_attributes = True
 
+class UrlInput(BaseModel):
+    url: str
+
 JobOut.model_rebuild()
 
 

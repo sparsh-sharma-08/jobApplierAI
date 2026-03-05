@@ -7,7 +7,6 @@ export interface AppSettings {
     currency: 'INR' | 'USD' | 'EUR' | 'GBP';
     defaultSort: 'score' | 'date';
     jobsPerPage: number;
-    compactView: boolean;
 
     // Job Sources
     enabledSources: string[];
@@ -26,7 +25,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     currency: 'INR',
     defaultSort: 'score',
     jobsPerPage: 50,
-    compactView: false,
     enabledSources: [...ALL_SOURCES],
     autoDownloadResume: false,
     showScoreBadges: true,
