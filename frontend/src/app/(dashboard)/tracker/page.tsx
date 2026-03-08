@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor, useSensor, useSensors, DragStartEvent, DragOverEvent, DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Briefcase, Building2, MapPin, Loader2, GripVertical, CheckCircle2, Plus, Search, X } from 'lucide-react';
+import { Briefcase, Building2, MapPin, Loader2, GripVertical, CheckCircle2, Plus, Search, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import LLMProgressBar from '@/components/LLMProgressBar';
@@ -32,7 +32,7 @@ const COLUMNS = [
 ];
 
 // --- SORTABLE CARD COMPONENT ---
-function SortableCard({ app }: { app: Application }) {
+function SortableCard({ app, onDelete }: { app: Application, onDelete: (id: number) => void }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
 
     const style = {
@@ -45,19 +45,22 @@ function SortableCard({ app }: { app: Application }) {
         <div
             ref={setNodeRef}
             style={style}
+            {...attributes}
+            {...listeners}
             className={`bg-white border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-primary-500 border-primary-500 z-50 scale-105 shadow-xl rotate-2' : 'border-slate-200 hover:border-slate-300'}`}
         >
             <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center flex-shrink-0 shadow-inner">
                     <span className="font-bold text-slate-500 text-lg uppercase">{app.job.company.charAt(0)}</span>
                 </div>
-                <div
-                    {...attributes}
-                    {...listeners}
-                    className="p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-grab active:cursor-grabbing transition-colors"
+                <button
+                    onPointerDown={(e) => { e.stopPropagation(); }}
+                    onClick={(e) => { e.stopPropagation(); onDelete(app.id); }}
+                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Remove Job"
                 >
-                    <GripVertical className="w-4 h-4" />
-                </div>
+                    <Trash2 className="w-4 h-4" />
+                </button>
             </div>
 
             <h3 className="font-bold text-slate-800 text-sm leading-tight mb-2 line-clamp-2">{app.job.role}</h3>
@@ -84,7 +87,7 @@ function SortableCard({ app }: { app: Application }) {
 
 
 // --- KANBAN COLUMN COMPONENT ---
-function KanbanColumn({ id, title, color, applications }: { id: string, title: string, color: string, applications: Application[] }) {
+function KanbanColumn({ id, title, color, applications, onDelete }: { id: string, title: string, color: string, applications: Application[], onDelete: (id: number) => void }) {
     const { setNodeRef, isOver } = useDroppable({ id });
 
     const colorMap: Record<string, { bg: string, border: string, text: string, grad: string, over: string, dropBorder: string, dropText: string }> = {
@@ -113,7 +116,7 @@ function KanbanColumn({ id, title, color, applications }: { id: string, title: s
             <div className={`p-3 flex-1 overflow-y-auto space-y-3 min-h-[150px] rounded-b-3xl ${isOver ? 'bg-transparent' : 'bg-transparent'}`}>
                 <SortableContext items={applications.map(a => a.id)} strategy={verticalListSortingStrategy}>
                     {applications.map(app => (
-                        <SortableCard key={app.id} app={app} />
+                        <SortableCard key={app.id} app={app} onDelete={onDelete} />
                     ))}
                 </SortableContext>
                 {applications.length === 0 && (
@@ -154,6 +157,28 @@ export default function TrackerPage() {
         };
         fetchPendingJobs();
     }, [showAddModal, applications]);
+
+    const handleDeleteApplication = async (appId: number) => {
+        if (!confirm('Are you sure you want to remove this job from your tracker?')) return;
+
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        try {
+            const res = await fetch(`${API}/applications/${appId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                toast.success('Job removed from tracker');
+                setApplications(prev => prev.filter(a => a.id !== appId));
+            } else {
+                toast.error('Failed to remove job');
+            }
+        } catch {
+            toast.error('Network error. Failed to delete.');
+        }
+    };
 
     const handleAddJobToTracker = async (jobId: number) => {
         const token = localStorage.getItem('token');
@@ -279,25 +304,30 @@ export default function TrackerPage() {
     }
 
     return (
-        <div className="h-full flex flex-col space-y-6 max-h-screen">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-                        <Briefcase className="w-6 h-6 text-primary-500" />
-                        Application Tracker
-                    </h1>
-                    <p className="text-sm text-slate-500 mt-1">Manage your job search pipeline via drag-and-drop.</p>
+        <div className="h-full flex flex-col space-y-4 max-h-screen">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+                            <Briefcase className="w-6 h-6 text-primary-500" />
+                            Application Tracker
+                        </h1>
+                        <p className="text-sm text-slate-500 mt-1">Manage your job search pipeline via drag-and-drop.</p>
+                    </div>
                 </div>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="btn-primary px-5 py-2.5 text-sm flex items-center gap-2"
-                >
-                    <Plus className="w-4 h-4" /> Add Application
-                </button>
+
+                <div className="flex items-center justify-end">
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="btn-primary px-8 py-3 text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all rounded-full"
+                    >
+                        <Plus className="w-5 h-5" /> Add Application to Tracker
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 overflow-x-auto pb-6">
-                <div className="flex gap-6 h-full items-start">
+                <div className="flex gap-4 h-full items-start">
                     <DndContext
                         sensors={sensors}
                         collisionDetection={closestCorners}
@@ -313,6 +343,7 @@ export default function TrackerPage() {
                                     title={col.title}
                                     color={col.color}
                                     applications={applications.filter(a => a.status === col.id)}
+                                    onDelete={handleDeleteApplication}
                                 />
                             </div>
                         ))}
@@ -320,7 +351,7 @@ export default function TrackerPage() {
                         <DragOverlay>
                             {activeApp ? (
                                 <div className="opacity-80 rotate-3 scale-105 shadow-xl transition-transform">
-                                    <SortableCard app={activeApp} />
+                                    <SortableCard app={activeApp} onDelete={() => { }} />
                                 </div>
                             ) : null}
                         </DragOverlay>
@@ -331,11 +362,12 @@ export default function TrackerPage() {
             {/* Quick Add Modal */}
             <AnimatePresence>
                 {showAddModal && (
-                    <>
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-hidden">
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50" onClick={() => setShowAddModal(false)} />
+                            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
+
                         <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl bg-white rounded-2xl shadow-2xl z-50 flex flex-col max-h-[80vh] overflow-hidden">
+                            className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
                             <div className="p-5 border-b flex items-center justify-between">
                                 <h2 className="text-xl font-bold text-slate-900">Add to Tracker</h2>
                                 <button onClick={() => setShowAddModal(false)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
@@ -375,7 +407,7 @@ export default function TrackerPage() {
                                 )}
                             </div>
                         </motion.div>
-                    </>
+                    </div>
                 )}
             </AnimatePresence>
         </div>
