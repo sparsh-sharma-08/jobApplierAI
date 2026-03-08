@@ -351,22 +351,8 @@ def fetch_jobs(
         raise HTTPException(400, "Please set up your profile first")
 
     sources_to_fetch = sources or ["remotive"]
-    base_roles = profile.preferred_roles or ["software engineer"]
+    roles = profile.preferred_roles or ["software engineer"]
     locations = profile.preferred_locations or []
-    
-    # Intelligent Scraping Keywords: Combine top roles with top skills
-    roles = []
-    for r in base_roles:
-        roles.append(r)
-    
-    if profile.skills:
-        top_skills = profile.skills[:3]
-        for r in base_roles[:2]:
-            for s in top_skills:
-                roles.append(f"{s} {r}")
-                
-    # Deduplicate while preserving order
-    roles = list(dict.fromkeys(roles))
 
     # Needs to be extracted into Celery, but passing user_id to background thread for now
     user_id = current_user.id

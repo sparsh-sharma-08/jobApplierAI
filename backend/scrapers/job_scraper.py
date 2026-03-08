@@ -461,15 +461,12 @@ class LinkedInScraper:
 # Shared helpers
 # ─────────────────────────────────────────────────────
 def _build_keywords(roles: List[str]) -> List[str]:
-    """Build a list of search keywords from role phrases."""
+    """Build a list of search keywords strictly from user role phrases."""
     kw = set()
     for r in roles:
         for word in r.lower().split():
             if len(word) > 2:
                 kw.add(word)
-    kw.update({'developer', 'engineer', 'frontend', 'backend', 'mobile',
-               'software', 'ai', 'ml', 'data', 'cloud', 'devops', 'web',
-               'python', 'java', 'react', 'node', 'full-stack', 'fullstack'})
     return list(kw)
 
 

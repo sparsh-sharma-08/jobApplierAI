@@ -52,10 +52,37 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
             existing = db.query(Job).filter(Job.user_id == user_id, Job.external_id == job_data["external_id"]).first()
             if existing: continue
 
+            # Strict Location Filtering
+            user_locations = [loc.lower() for loc in locations] if locations else []
+            job_loc = job_data.get("location", "").lower()
+            remote_pref = profile_dict.get("remote_preference", "any").lower()
+            
+            source = job_data.get("source", "")
+            raw_data = job_data.get("raw_data", {})
+            is_remote_job = (
+                "remote" in job_loc or "anywhere" in job_loc or "worldwide" in job_loc 
+                or source in ["remotive", "jobicy", "himalayas"]
+                or raw_data.get("remote") is True
+            )
+            
+            if remote_pref in ["onsite", "hybrid"]:
+                if user_locations and not is_remote_job:
+                    # Job is not remote, must explicitly match one of user's requested locations
+                    matched_loc = any(uloc in job_loc for uloc in user_locations)
+                    if not matched_loc:
+                        logger.info(f"Skipped {job_data.get('role')} at {job_data.get('company')} due to location strictly onsite/hybrid requirement.")
+                        continue
+            elif remote_pref == "remote":
+                if not is_remote_job:
+                    # User strictly wants remote, skip if it's not
+                    logger.info(f"Skipped {job_data.get('role')} at {job_data.get('company')} because it is not remote.")
+                    continue
+
             score_result = score_job(job_data, profile_dict)
             
-            # 40% Match Threshold Filter
+            # Let the user decide: accept every job that survived keyword filtering
             if score_result["score"] < 40:
+                logger.info(f"Skipped {job_data.get('role')} at {job_data.get('company')} due to extremely low score {score_result['score']}.")
                 continue
 
             posted_date = None
