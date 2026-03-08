@@ -208,7 +208,9 @@ def upsert_profile(
 ):
     profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
     if profile:
-        for key, value in data.model_dump().items():
+        # Only update fields explicitly provided in the payload, don't overwrite master_resume with null
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
             setattr(profile, key, value)
     else:
         profile = CandidateProfile(**data.model_dump(), user_id=current_user.id)
@@ -255,6 +257,28 @@ async def upload_resume_pdf(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error extracting resume PDF: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@app.put("/profile/master-resume")
+def update_master_resume(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found. Please set your basic profile first.")
+        
+    master_resume = payload.get("master_resume")
+    if master_resume is None:
+        raise HTTPException(status_code=400, detail="master_resume payload is required")
+        
+    profile.master_resume = master_resume
+    db.commit()
+    db.refresh(profile)
+    return {"message": "Master resume updated successfully"}
+
 @app.get("/profile/master-resume")
 def get_master_resume(
     db: Session = Depends(get_db),
