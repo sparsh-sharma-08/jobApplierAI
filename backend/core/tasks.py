@@ -1,4 +1,7 @@
 import os
+# Hack to prevent macOS Objective-C fork() process crashes when loading heavy ML models in Celery
+os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+
 import logging
 from datetime import datetime
 from celery import Celery
@@ -81,7 +84,7 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
             score_result = score_job(job_data, profile_dict)
             
             # Let the user decide: accept every job that survived keyword filtering
-            if score_result["score"] < 40:
+            if score_result["score"] < 30:
                 logger.info(f"Skipped {job_data.get('role')} at {job_data.get('company')} due to extremely low score {score_result['score']}.")
                 continue
 

@@ -6,6 +6,14 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import logging
+import numpy as np
+
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+except ImportError:
+    pass # Will be handled by the script runner
+
+from services.embedding_service import embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,38 +51,73 @@ def score_job(
     role = (job.get("role") or "").lower()
     full_text = description + " " + role
 
-    # --- Skill Match (0–35 points) ---
+    # --- 1. Semantic Vector Match (0–60 points) ---
+    semantic_score = 0
+    try:
+        # Flatten master resume into a searchable document string
+        master_resume = profile.get("master_resume")
+        if master_resume and isinstance(master_resume, dict):
+            resume_text = f"{master_resume.get('summary', '')} "
+            for exp in master_resume.get("experience", []):
+                resume_text += f"{exp.get('title', '')} {exp.get('company', '')} {exp.get('description', '')} "
+            for proj in master_resume.get("projects", []):
+                resume_text += f"{proj.get('name', '')} {proj.get('description', '')} "
+        else:
+            resume_text = " ".join(candidate_skills)
+
+        # Get Embeddings
+        # In a real heavy traffic system, we should pass user_id to cache the resume,
+        # but for this fallback we will just recompute or use a dummy ID 0
+        resume_vector = embedding_service.get_resume_embedding(0, resume_text).reshape(1, -1)
+        job_vector = embedding_service.encode(full_text).reshape(1, -1)
+        
+        # Calculate Cosine Similarity (-1 to 1) -> scaled to (0 to 1)
+        similarity = cosine_similarity(resume_vector, job_vector)[0][0]
+        # Only reward positive similarity
+        if similarity > 0:
+            semantic_score = similarity * 60  # 60% of total score
+            
+    except Exception as e:
+        logger.error(f"Semantic scoring failed, falling back to 0: {e}")
+        
+    score += semantic_score
+
+    # --- 2. Hard Skill/Keyword Match (0–20 points) ---
     tech_keywords_in_jd = extract_keywords(full_text)
 
     for skill in candidate_skills:
-        # check exact or substring match
         if skill in full_text or any(skill in kw or kw in skill for kw in tech_keywords_in_jd):
             matched_skills.append(skill)
 
-    skill_score = min(35, int((len(matched_skills) / max(len(candidate_skills), 1)) * 35))
-    score += skill_score
-
-    # --- Keyword Match (0–20 points) ---
     jd_keywords = extract_keywords(full_text)
     candidate_keywords = extract_keywords(" ".join(candidate_skills))
     keyword_overlap = jd_keywords & candidate_keywords
-    keyword_score = min(20, int((len(keyword_overlap) / max(len(jd_keywords), 1)) * 100))
+    
+    # 20 max points out of the total 100
+    keyword_score = min(20, int((len(keyword_overlap) / max(len(jd_keywords), 1)) * 20))
     score += keyword_score
 
-    # Find truly missing tech skills dynamically from the job description
-    try:
-        from services.llm_service import TECH_KEYWORDS
-        all_tech = TECH_KEYWORDS
-    except ImportError:
-        all_tech = {'python', 'java', 'javascript', 'typescript', 'react', 'node', 'aws', 'docker',
-                    'kubernetes', 'sql', 'nosql', 'mongodb', 'postgres', 'redis', 'kafka', 'go', 'rust',
-                    'swift', 'kotlin', 'flutter', 'django', 'flask', 'fastapi', 'spring', 'angular', 'vue',
-                    'graphql', 'rest', 'api', 'ci', 'cd', 'git', 'linux', 'ml', 'ai', 'tensorflow', 'pytorch'}
-        
-    for kw in all_tech:
-        # If the term is explicitly mentioned in the job role/description but is completely missing from user skills
-        if kw in full_text and not any(kw == s or kw in s for s in candidate_skills):
+    # Find truly missing skills dynamically from the job description itself, not a hardcoded engineering list
+    # Extract important keywords from the JD (using the same extract_keywords filter to drop stopwords)
+    jd_keywords_set = extract_keywords(full_text)
+    
+    # Filter out common buzzwords that aren't real skills
+    buzzwords = {'team', 'work', 'experience', 'looking', 'seeking', 'role', 'position', 'requirements', 'years'}
+    meaningful_jd_words = {kw for kw in jd_keywords_set if kw not in buzzwords and len(kw) > 2}
+    
+    # Calculate words in JD that the user does not have in their skills/resume
+    for kw in meaningful_jd_words:
+        # Check if this keyword is anywhere in the candidate's skills string
+        candidate_skills_str = " ".join(candidate_skills)
+        if kw not in candidate_skills_str:
+            # We also check that the keyword appeared multiple times to ensure it's a real "skill"
+            # Or if it's a known tech/domain term. Since we want this to be domain agnostic,
+            # we'll just check if it appears in the text.
             missing_keywords.append(kw)
+            
+    # Sort them by frequency in the JD to surface the most critical missing ones
+    # (Since we just have a set, we'll count occurrences in full_text to rank them)
+    missing_keywords.sort(key=lambda kw: full_text.count(kw), reverse=True)
 
     # --- Experience Compatibility (0–20 points) ---
     exp_level = profile.get("experience_level", "fresher").lower()
@@ -128,38 +171,10 @@ def score_job(
 
     score += loc_score
 
-    # --- Salary Match (-20 to 10 points) ---
-    salary_match = None
-    salary_score = 0  # neutral by default
-    min_salary = profile.get("min_salary")
-    job_salary_str = job.get("salary") or ""
-    if min_salary and job_salary_str:
-        s_str = job_salary_str.lower().replace(',', '').replace(' ', '')
-        # extract ranges like 150000, 15lpa, 15l, 100k, $100k
-        numbers = re.findall(r'(\d+)(k|lpa|l|m|cr)?', s_str)
-        if numbers:
-            max_offered = 0
-            for num, suffix in numbers:
-                val = int(num)
-                if suffix == 'k': val *= 1000
-                elif suffix in ('l', 'lpa'): val *= 100000
-                elif suffix in ('cr'): val *= 10000000
-                elif suffix == 'm': val *= 1000000
-                if val > max_offered:
-                    max_offered = val
-            
-            # Compare annual salaries
-            if max_offered > 1000:
-                if max_offered >= min_salary:
-                    salary_score = 10
-                    salary_match = True
-                else:
-                    salary_score = -20  # Strong penalty for paying below expectations
-                    salary_match = False
-    score += salary_score
+    # Removed the chaotic Salary regex matching that mistakenly penalized users.
 
-    # --- Job Recency (0–5 points) ---
-    recency_score = 3.0
+    # --- 3. Job Recency (0–10 points) ---
+    recency_score = 5.0
     posted_date = job.get("posted_date")
     if posted_date:
         if isinstance(posted_date, str):
@@ -168,20 +183,19 @@ def score_job(
             except Exception:
                 posted_date = None
         if posted_date:
-            # Strip timezone info to avoid naive/aware comparison errors
             if posted_date.tzinfo is not None:
                 posted_date = posted_date.replace(tzinfo=None)
             days_old = (datetime.utcnow() - posted_date).days
             if days_old <= 2:
-                recency_score = 5.0
+                recency_score = 10.0
             elif days_old <= 7:
-                recency_score = 4.0
+                recency_score = 8.0
             elif days_old <= 14:
-                recency_score = 3.0
+                recency_score = 5.0
             elif days_old <= 30:
                 recency_score = 2.0
             else:
-                recency_score = 1.0
+                recency_score = 0.0
 
     score += recency_score
 
@@ -198,16 +212,14 @@ def score_job(
         "matched_skills": matched_skills,
         "missing_keywords": missing_keywords[:10],
         "location_match": location_match,
-        "salary_match": salary_match,
         "experience_match": experience_match,
         "recency_score": recency_score,
         "breakdown": {
-            "skill_score": skill_score,
-            "keyword_score": keyword_score,
-            "experience_score": exp_score,
-            "location_score": loc_score,
-            "salary_score": salary_score,
-            "recency_score": recency_score,
+            "semantic_score": round(semantic_score, 2),
+            "keyword_score": round(keyword_score, 2),
+            "experience_score": round(exp_score, 2),
+            "location_score": round(loc_score, 2),
+            "recency_score": round(recency_score, 2),
             "role_bonus": role_bonus
         },
         "reasoning": _generate_reasoning(matched_skills, missing_keywords, location_match, experience_match, score)

@@ -113,7 +113,7 @@ class ArbeitnowScraper:
                 title = (item.get("title") or "").lower()
                 tags = [t.lower() for t in item.get("tags", [])]
 
-                if not any(kw in title or any(kw in tag for tag in tags) for kw in role_keywords):
+                if role_keywords and not any(kw in title or any(kw in tag for tag in tags) for kw in role_keywords):
                     continue
 
                 slug = item.get("slug", "")
@@ -179,7 +179,7 @@ class JobicyScraper:
                 industry = " ".join(industry_raw).lower() if isinstance(industry_raw, list) else str(industry_raw).lower()
                 excerpt = (item.get("jobExcerpt") or "").lower()
 
-                if not any(kw in title or kw in industry or kw in excerpt for kw in role_keywords):
+                if role_keywords and not any(kw in title or kw in industry or kw in excerpt for kw in role_keywords):
                     continue
 
                 url = item.get("url", "")
@@ -245,7 +245,7 @@ class HimalayasScraper:
                 categories = " ".join(item.get("categories", [])).lower()
                 excerpt = (item.get("excerpt") or "").lower()
 
-                if not any(kw in title or kw in categories or kw in excerpt for kw in role_keywords):
+                if role_keywords and not any(kw in title or kw in categories or kw in excerpt for kw in role_keywords):
                     continue
 
                 apply_link = item.get("applicationLink") or item.get("guid") or ""

@@ -375,7 +375,27 @@ def fetch_jobs(
         raise HTTPException(400, "Please set up your profile first")
 
     sources_to_fetch = sources or ["remotive"]
-    roles = profile.preferred_roles or ["software engineer"]
+    
+    # Intelligently determine roles:
+    # 1. Use explicitly preferred roles if available
+    # 2. Fall back to their basic profile skills (first 5)
+    # 3. If no skills, look at their master resume job titles
+    # 4. If all else fails, use a completely blank search to fetch generic remote jobs
+    roles = profile.preferred_roles or []
+    
+    if not roles and profile.skills:
+        roles = profile.skills[:5]
+        
+    if not roles and profile.master_resume:
+        exp = profile.master_resume.get("experience", [])
+        if exp and len(exp) > 0:
+            title = exp[0].get("title")
+            if title:
+                roles = [title]
+                
+    if not roles:
+        roles = [""] # Empty string will trigger an unfettered generic search on most APIs
+        
     locations = profile.preferred_locations or []
 
     # Needs to be extracted into Celery, but passing user_id to background thread for now
