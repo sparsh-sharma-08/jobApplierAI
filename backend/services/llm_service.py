@@ -306,12 +306,13 @@ def generate_cover_letter(
     project_summaries = []
     for p in projects:
         if isinstance(p, dict):
-            project_summaries.append(f"{p.get('name', '')}: {p.get('description', '')[:100]}")
+            desc = p.get('description') or ''
+            project_summaries.append(f"{p.get('name') or ''}: {desc[:100]}")
 
     exp_summaries = []
     for e in experience:
         if isinstance(e, dict):
-            exp_summaries.append(f"{e.get('title', '')} at {e.get('company', '')}")
+            exp_summaries.append(f"{e.get('title') or ''} at {e.get('company') or ''}")
 
     skills_str = ', '.join(skills) if skills and isinstance(skills[0], str) else ', '.join(str(s) for s in skills)
     today = datetime.now().strftime("%B %d, %Y")
