@@ -40,13 +40,10 @@ export default function LandingPage() {
 
     // --- STEP 2: AUTH ---
     const doLogin = async (loginEmail: string, loginPassword: string) => {
-        const authData = new URLSearchParams();
-        authData.append('username', loginEmail);
-        authData.append('password', loginPassword);
         const res = await fetch(`${API}/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: authData.toString(),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: loginEmail, password: loginPassword }),
         });
         if (!res.ok) throw new Error('Invalid credentials');
         const data = await res.json();

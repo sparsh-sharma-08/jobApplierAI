@@ -413,6 +413,11 @@ PARSE_RESUME_SYSTEM_PROMPT = """You are an expert Data Extraction AI.
 Extract resume data from the provided unstructured text into a STRICT JSON format. 
 DO NOT output any conversational text, introductions, or explanations. ONLY output valid JSON.
 
+CRITICAL ANTI-HALLUCINATION RULES:
+1. ONLY extract skills that are EXPLICITLY written in the text. NEVER guess or assume skills based on job titles.
+2. If a section is missing from the text (e.g. no projects), return an empty array [] or empty string "". Do NOT invent fallback data.
+3. NEVER wrap the response in markdown blocks like ```json. Return ONLY the raw JSON object starting with { and ending with }.
+
 Use this EXACT JSON schema (replace empty strings and empty arrays with extracted data):
 {
   "name": "",
@@ -431,7 +436,7 @@ Use this EXACT JSON schema (replace empty strings and empty arrays with extracte
       "company": "",
       "start_date": "",
       "end_date": "",
-      "highlights": [],
+      "description": "",
       "technologies": []
     }
   ],
@@ -440,8 +445,7 @@ Use this EXACT JSON schema (replace empty strings and empty arrays with extracte
       "name": "",
       "description": "",
       "technologies": [],
-      "link": "",
-      "highlights": []
+      "link": ""
     }
   ],
   "education": [
@@ -466,44 +470,115 @@ CRITICAL GUIDELINES:
 7. JSON FORMAT: Your entire response MUST be valid JSON starting with `{` and ending with `}`."""
 
 
+def _extract_json(text: str, is_array: bool = False) -> Any:
+    # Helper to safely extract JSON arrays or objects from LLM text
+    start_char = '[' if is_array else '{'
+    end_char = ']' if is_array else '}'
+    start = text.find(start_char)
+    end = text.rfind(end_char)
+    if start != -1 and end != -1 and end >= start:
+        return json.loads(text[start:end+1])
+    return [] if is_array else {}
+
 def parse_pdf_to_json(pdf_text: str) -> Dict[str, Any]:
-    """Parse raw PDF text into a structured JSON master resume."""
+    """Parse raw PDF text into a structured JSON master resume using a multi-pass focused strategy."""
     if not OPENAI_API_KEY:
         raise ValueError("No OpenAI API key set. Cannot parse PDF.")
 
     client = get_openai_client()
 
-    response = _call_llm_with_retry(
-        client=client,
-        messages=[
-            {"role": "system", "content": PARSE_RESUME_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Extract the structured data from the following resume text:\n\n{pdf_text[:10000]}"}
-        ],
-        temperature=0.0,
-        max_tokens=2500
-    )
-    content = response.choices[0].message.content.strip()
+    # Base parsed object
+    parsed = {
+        "name": "",
+        "contact": {"email": "", "phone": "", "location": "", "linkedin": "", "github": ""},
+        "summary": "",
+        "skills": [],
+        "experience": [],
+        "projects": [],
+        "education": []
+    }
 
-    # Robust JSON extraction
-    start_idx = content.find('{')
-    end_idx = content.rfind('}')
-    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-        json_str = content[start_idx:end_idx+1]
-        try:
-            parsed = json.loads(json_str)
-            # Ensure skills are flat strings
-            if "skills" in parsed and isinstance(parsed["skills"], list):
-                parsed["skills"] = [
-                    s if isinstance(s, str) else (s.get("title", s.get("name", str(s))) if isinstance(s, dict) else str(s))
-                    for s in parsed["skills"]
-                ]
-            return parsed
-        except json.JSONDecodeError as e:
-            logger.error(f"JSONDecodeError extracting LLM parsing: {e} - Raw text: {json_str}")
-            raise ValueError("LLM generated invalid JSON structure.")
-    else:
-        logger.error(f"No JSON brackets found in LLM response: {content}")
-        raise ValueError("Failed to extract JSON from the AI response.")
+    # Pass 1: Core Information
+    core_prompt = """Extract basic resume information into STRICT JSON. 
+DO NOT hallucinate. Reply ONLY with JSON.
+Schema:
+{
+  "name": "",
+  "contact": {"email": "", "phone": "", "location": "", "linkedin": "", "github": ""},
+  "summary": "",
+  "skills": ["Skill1", "Skill2"]
+}"""
+    try:
+        res1 = _call_llm_with_retry(client, [{"role": "system", "content": core_prompt}, {"role": "user", "content": pdf_text[:4000]}], 0.1, 800)
+        p1 = _extract_json(res1.choices[0].message.content)
+        parsed.update({k: p1.get(k, parsed[k]) for k in ["name", "contact", "summary"]})
+        if isinstance(p1.get("skills"), list):
+            parsed["skills"] = [str(s) for s in p1["skills"]]
+    except Exception as e:
+        logger.error(f"Pass 1 (Core) Failed: {e}")
+
+    # Pass 2: Work Experience
+    exp_prompt = """Extract PROFESSIONAL WORK EXPERIENCE (jobs at companies) into a STRICT JSON array. 
+DO NOT include academic projects, personal projects, or hackathons here (they go elsewhere).
+If there is no formal employment history, return an empty array [].
+Reply ONLY with a JSON array starting with [ and ending with ].
+Schema:
+[{"title": "", "company": "", "start_date": "", "end_date": "", "description": "", "technologies": []}]"""
+    try:
+        res2 = _call_llm_with_retry(client, [{"role": "system", "content": exp_prompt}, {"role": "user", "content": pdf_text}], 0.1, 1500)
+        parsed["experience"] = _extract_json(res2.choices[0].message.content, is_array=True)
+    except Exception as e:
+        logger.error(f"Pass 2 (Exp) Failed: {e}")
+
+    # Pass 3: Projects & Education
+    proj_prompt = """Extract ACADEMIC/PERSONAL PROJECTS and EDUCATION into STRICT JSON.
+DO NOT include professional work experience or formal employment here.
+Reply ONLY with JSON.
+Schema:
+{
+  "projects": [{"name": "", "description": "", "technologies": [], "link": ""}],
+  "education": [{"degree": "", "institution": "", "year": ""}]
+}"""
+    try:
+        res3 = _call_llm_with_retry(client, [{"role": "system", "content": proj_prompt}, {"role": "user", "content": pdf_text}], 0.1, 1000)
+        p3 = _extract_json(res3.choices[0].message.content)
+        parsed["projects"] = p3.get("projects", [])
+        parsed["education"] = p3.get("education", [])
+    except Exception as e:
+        logger.error(f"Pass 3 (Proj) Failed: {e}")
+
+    # Final Schema Guarantee
+    if not isinstance(parsed["skills"], list): parsed["skills"] = []
+    if not isinstance(parsed["experience"], list): parsed["experience"] = []
+    if not isinstance(parsed["projects"], list): parsed["projects"] = []
+    
+    # --- POST-PROCESSING: FIX GEMMA 2B EXPERIENCE VS PROJECTS HALLUCINATION ---
+    # Gemma 2B often misclassifies Academic/Personal Projects as "Experience" with company="N/A"
+    cleaned_experience = []
+    project_names = {str(p.get("name", "")).lower().strip() for p in parsed["projects"] if isinstance(p, dict)}
+    
+    for exp in parsed["experience"]:
+        if not isinstance(exp, dict): continue
+        title = str(exp.get("title", "")).strip()
+        company = str(exp.get("company", "")).strip().lower()
+        
+        # Heuristics: if company is 'n/a', 'none', empty, or literally the same as the title, it's a project.
+        if company in ["n/a", "none", "", title.lower()] or title.lower() in project_names:
+            # It's a project masquerading as experience. Add it to projects if not already there.
+            if title.lower() not in project_names and title:
+                parsed["projects"].append({
+                    "name": title,
+                    "description": exp.get("description", ""),
+                    "technologies": exp.get("technologies", []),
+                    "link": exp.get("link", "")
+                })
+                project_names.add(title.lower())
+        else:
+            cleaned_experience.append(exp)
+            
+    parsed["experience"] = cleaned_experience
+    
+    return parsed
 
 
 # ─────────────────────────────────────────────────────
