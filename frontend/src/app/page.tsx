@@ -414,61 +414,136 @@ export default function LandingPage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-            className="glass-card p-8 sm:p-12 max-w-md w-full mx-auto"
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="w-full max-w-5xl mx-auto bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100 min-h-[600px]"
         >
-            <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-500/30 mb-4">
-                    {isLogin ? <Lock className="w-7 h-7 text-white" /> : <Mail className="w-7 h-7 text-white" />}
+            {/* Left Side: Visual/Branding */}
+            <div className="md:w-5/12 hidden md:flex flex-col justify-between p-12 bg-slate-900 text-white relative overflow-hidden">
+                {/* Decorative glows */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary-500/30 rounded-full blur-[80px]"></div>
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-secondary-500/20 rounded-full blur-[80px]"></div>
+                
+                <div className="relative z-10 w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 mb-8">
+                    <Briefcase className="w-6 h-6 text-primary-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-slate-900">
-                    {isLogin ? 'Welcome back' : 'Create an account'}
-                </h1>
-                <p className="text-slate-500 mt-1 text-sm">
-                    {isLogin ? 'Log in to access your dashboard.' : 'First, save your progress securely.'}
-                </p>
+                
+                <div className="relative z-10 mt-auto">
+                    <h2 className="text-3xl font-bold mb-4 leading-tight">
+                        {isLogin ? "Welcome back to your Copilot." : "Your career, accelerated."}
+                    </h2>
+                    <p className="text-slate-300 text-base leading-relaxed mb-8">
+                        {isLogin 
+                            ? "Resume targeted applications, track your progress, and land interviews faster than ever with AI-powered insights."
+                            : "Join professionals bypassing ATS filters and landing interviews at top companies using our targeted AI resume builder."}
+                    </p>
+                    
+                    {/* Minimal decorative element */}
+                    <div className="flex gap-2 items-center">
+                        <div className="w-8 h-1.5 rounded-full bg-primary-500"></div>
+                        <div className="w-2 h-1.5 rounded-full bg-slate-700"></div>
+                        <div className="w-2 h-1.5 rounded-full bg-slate-700"></div>
+                    </div>
+                </div>
             </div>
 
-            {errorMsg && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-medium text-center">
-                    {errorMsg}
-                </div>
-            )}
+            {/* Right Side: Form */}
+            <div className="md:w-7/12 p-8 sm:p-14 flex flex-col justify-center bg-white relative">
+                <div className="max-w-md w-full mx-auto">
+                    <div className="mb-10 lg:hidden">
+                        <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white mb-6">
+                            <Briefcase className="w-6 h-6" />
+                        </div>
+                    </div>
 
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Email address</label>
-                    <div className="relative">
-                        <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all bg-white/70"
-                            placeholder="you@example.com" />
+                    <div className="mb-10">
+                        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">
+                            {isLogin ? 'Sign in' : 'Create an account'}
+                        </h1>
+                        <p className="text-slate-500 text-base">
+                            {isLogin ? 'Enter your details to access your dashboard.' : 'Start targeting roles in seconds.'}
+                        </p>
+                    </div>
+
+                    {errorMsg && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mb-8 p-4 bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-2xl flex items-start gap-3"
+                        >
+                            <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <span className="text-red-600 text-xs font-bold">!</span>
+                            </div>
+                            <span className="text-red-700 text-sm font-medium leading-relaxed">{errorMsg}</span>
+                        </motion.div>
+                    )}
+
+                    <form onSubmit={handleAuthSubmit} className="space-y-5">
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-semibold text-slate-700">Email address</label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                                </div>
+                                <input 
+                                    type="email" 
+                                    value={email} 
+                                    onChange={e => setEmail(e.target.value)} 
+                                    required
+                                    className="block w-full pl-11 pr-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all outline-none"
+                                    placeholder="you@example.com" 
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-semibold text-slate-700">Password</label>
+                                {isLogin && <a href="#" className="text-sm font-medium text-primary-600 hover:text-primary-700">Forgot password?</a>}
+                            </div>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Lock className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                                </div>
+                                <input 
+                                    type="password" 
+                                    value={password} 
+                                    onChange={e => setPassword(e.target.value)} 
+                                    required
+                                    className="block w-full pl-11 pr-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all outline-none"
+                                    placeholder="••••••••" 
+                                />
+                            </div>
+                        </div>
+
+                        <button 
+                            type="submit" 
+                            disabled={isProcessing}
+                            className="w-full btn-primary py-4 mt-8 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-70 text-base font-semibold shadow-lg shadow-primary-500/25 group transition-all hover:-translate-y-0.5"
+                        >
+                            {isProcessing ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <>
+                                    {isLogin ? 'Sign in to Dashboard' : 'Create Account'}
+                                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    <div className="mt-10 pt-8 border-t border-slate-100 flex items-center justify-center">
+                        <p className="text-sm text-slate-500">
+                            {isLogin ? "Don't have an account? " : "Already have an account? "}
+                            <button 
+                                onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
+                                className="text-primary-600 font-semibold hover:text-primary-700 transition-colors"
+                            >
+                                {isLogin ? 'Sign up for free' : 'Sign in'}
+                            </button>
+                        </p>
                     </div>
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-                    <div className="relative">
-                        <Lock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all bg-white/70"
-                            placeholder="••••••••" />
-                    </div>
-                </div>
-
-                <button type="submit" disabled={isProcessing}
-                    className="w-full btn-primary py-3.5 mt-2 flex items-center justify-center gap-2 disabled:opacity-70 text-base">
-                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ChevronRight className="w-5 h-5" />}
-                    {isLogin ? 'Sign in' : 'Create account'}
-                </button>
-            </form>
-
-            <p className="text-center text-sm text-slate-500 mt-6">
-                {isLogin ? "Don't have an account? " : "Already have an account? "}
-                <button onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
-                    className="text-primary-600 font-medium hover:underline">
-                    {isLogin ? 'Sign up for free' : 'Sign in'}
-                </button>
-            </p>
+            </div>
         </motion.div>
     );
 
