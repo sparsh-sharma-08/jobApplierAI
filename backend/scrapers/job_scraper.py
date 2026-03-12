@@ -29,7 +29,7 @@ def _human_delay(min_s=0.5, max_s=1.5):
 class RemotiveScraper:
     API_URL = "https://remotive.com/api/remote-jobs"
 
-    def scrape(self, roles: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
+    def scrape(self, roles: List[str], locations: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
         try:
             import requests
             headers = {"User-Agent": "Mozilla/5.0 CareerCopilot/1.0"}
@@ -39,9 +39,8 @@ class RemotiveScraper:
             job_results = []
             
             for role in roles:
-                # The remotive API sometimes fails on spaces in search, urlencoding helps or just relying on raw search
                 search_term = role.split()[0] if role else ""
-                params = {"search": search_term, "limit": max_jobs}
+                params = {"search": search_term, "limit": max_jobs * 2}
                 response = requests.get(self.API_URL, params=params, headers=headers, timeout=15, proxies=proxies)
                 response.raise_for_status()
 
@@ -49,16 +48,23 @@ class RemotiveScraper:
                 if "jobs" not in data:
                     continue
                 
-                for item in data["jobs"][:max_jobs]:
+                for item in data["jobs"]:
                     if not isinstance(item, dict):
                         continue
 
+                    location = item.get("candidate_required_location", "Remote")
+                    
+                    if locations:
+                        # Only allow if job location says worldwide/anywhere/remote or matches user location
+                        loc_lower = location.lower()
+                        loc_match = any(l.lower() in loc_lower for l in locations) or "worldwide" in loc_lower or "anywhere" in loc_lower or loc_lower == "remote"
+                        if not loc_match:
+                            continue
+
                     job_id = _make_job_id("remotive", str(item.get("id", item.get("url", ""))))
                     apply_link = item.get("url") or ""
-
                     description = item.get("description", "")
                     posted_date = _parse_date(item.get("publication_date"))
-
                     salary = item.get("salary") or ""
 
                     job_results.append({
@@ -66,7 +72,7 @@ class RemotiveScraper:
                         "source": "remotive",
                         "company": item.get("company_name", "Unknown"),
                         "role": item.get("title", ""),
-                        "location": item.get("candidate_required_location", "Remote"),
+                        "location": location,
                         "salary": salary,
                         "description": description[:5000],
                         "apply_link": apply_link,
@@ -93,7 +99,7 @@ class RemotiveScraper:
 class ArbeitnowScraper:
     API_URL = "https://www.arbeitnow.com/api/job-board-api"
 
-    def scrape(self, roles: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
+    def scrape(self, roles: List[str], locations: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
         try:
             import requests
             headers = {"User-Agent": "Mozilla/5.0 CareerCopilot/1.0"}
@@ -106,7 +112,7 @@ class ArbeitnowScraper:
             jobs = []
             role_keywords = _build_keywords(roles)
 
-            for item in data.get("data", [])[:200]:
+            for item in data.get("data", [])[:500]:
                 if not isinstance(item, dict):
                     continue
 
@@ -115,6 +121,13 @@ class ArbeitnowScraper:
 
                 if role_keywords and not any(kw in title or any(kw in tag for tag in tags) for kw in role_keywords):
                     continue
+
+                location = item.get("location", "Remote")
+                if locations:
+                    loc_lower = location.lower()
+                    loc_match = any(l.lower() in loc_lower for l in locations) or loc_lower == "remote" or "worldwide" in loc_lower or "anywhere" in loc_lower
+                    if not loc_match:
+                        continue
 
                 slug = item.get("slug", "")
                 apply_link = item.get("url") or f"https://www.arbeitnow.com/view/{slug}"
@@ -133,7 +146,7 @@ class ArbeitnowScraper:
                     "source": "arbeitnow",
                     "company": item.get("company_name", "Unknown"),
                     "role": item.get("title", ""),
-                    "location": item.get("location", "Remote"),
+                    "location": location,
                     "salary": "",
                     "description": (item.get("description") or "")[:5000],
                     "apply_link": apply_link,
@@ -158,7 +171,7 @@ class ArbeitnowScraper:
 class JobicyScraper:
     API_URL = "https://jobicy.com/api/v2/remote-jobs"
 
-    def scrape(self, roles: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
+    def scrape(self, roles: List[str], locations: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
         try:
             import requests
             headers = {"User-Agent": "Mozilla/5.0 CareerCopilot/1.0"}
@@ -167,8 +180,8 @@ class JobicyScraper:
 
             jobs = []
             _human_delay(0.5, 1.5)
-            # Fetch broadly — Jobicy's tag filter is too narrow
             params = {"count": 50}
+                
             response = requests.get(self.API_URL, params=params, headers=headers, timeout=15, proxies=proxies)
             response.raise_for_status()
             data = response.json()
@@ -182,14 +195,20 @@ class JobicyScraper:
                 if role_keywords and not any(kw in title or kw in industry or kw in excerpt for kw in role_keywords):
                     continue
 
+                geo = item.get("jobGeo", "")
+                location = geo if geo else "Remote"
+                
+                if locations:
+                    loc_lower = location.lower()
+                    loc_match = any(l.lower() in loc_lower for l in locations) or "anywhere" in loc_lower or "worldwide" in loc_lower or loc_lower == "remote"
+                    if not loc_match:
+                        continue
+
                 url = item.get("url", "")
                 job_id = _make_job_id("jobicy", url or str(item.get("id", "")))
 
                 posted_date = _parse_date(item.get("pubDate"))
                 desc = item.get("jobDescription") or item.get("jobExcerpt") or ""
-
-                geo = item.get("jobGeo", "")
-                location = geo if geo else "Remote"
 
                 jobs.append({
                     "external_id": job_id,
@@ -226,7 +245,7 @@ class JobicyScraper:
 class HimalayasScraper:
     API_URL = "https://himalayas.app/jobs/api"
 
-    def scrape(self, roles: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
+    def scrape(self, roles: List[str], locations: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
         try:
             import requests
             headers = {"User-Agent": "Mozilla/5.0 CareerCopilot/1.0"}
@@ -248,6 +267,15 @@ class HimalayasScraper:
                 if role_keywords and not any(kw in title or kw in categories or kw in excerpt for kw in role_keywords):
                     continue
 
+                loc_restrictions = item.get("locationRestrictions", [])
+                location = ", ".join(loc_restrictions) if loc_restrictions else "Remote / Worldwide"
+
+                if locations:
+                    loc_lower = location.lower()
+                    loc_match = any(l.lower() in loc_lower for l in locations) or "worldwide" in loc_lower or "anywhere" in loc_lower
+                    if not loc_match and loc_restrictions:
+                        continue
+
                 apply_link = item.get("applicationLink") or item.get("guid") or ""
                 job_id = _make_job_id("himalayas", apply_link or item.get("title", ""))
 
@@ -262,10 +290,6 @@ class HimalayasScraper:
                     salary = f"{currency} {int(min_sal):,} - {int(max_sal):,}"
                 elif min_sal:
                     salary = f"{currency} {int(min_sal):,}+"
-
-                # Build location from restrictions
-                loc_restrictions = item.get("locationRestrictions", [])
-                location = ", ".join(loc_restrictions) if loc_restrictions else "Remote / Worldwide"
 
                 description = item.get("description") or item.get("excerpt") or ""
 
@@ -504,6 +528,7 @@ class JobScrapeManager:
         sources: List[str],
         roles: List[str],
         locations: List[str],
+        remote_pref: str = "any",
         max_jobs_per_source: int = 20
     ) -> List[Dict[str, Any]]:
         all_jobs = []
@@ -514,13 +539,14 @@ class JobScrapeManager:
                 logger.warning(f"Unknown source: {source}")
                 continue
 
+            # Skip strictly remote job boards if user explicitly wants onsite only
+            if remote_pref == "onsite" and source in ("remotive", "arbeitnow", "jobicy", "himalayas"):
+                logger.info(f"Skipping {source} because preference is onsite-only")
+                continue
+
             logger.info(f"Fetching from {source}...")
             try:
-                if source in ("remotive", "arbeitnow", "jobicy", "himalayas"):
-                    jobs = scraper.scrape(roles, max_jobs_per_source)
-                elif source == "adzuna":
-                    jobs = scraper.scrape(roles, locations, max_jobs_per_source)
-                elif source in ("linkedin",):
+                if source in ("remotive", "arbeitnow", "jobicy", "himalayas", "adzuna", "linkedin"):
                     jobs = scraper.scrape(roles, locations, max_jobs_per_source)
                 else:
                     jobs = []

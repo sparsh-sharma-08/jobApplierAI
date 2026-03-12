@@ -48,7 +48,8 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
     db: Session = SessionLocal()
     try:
         scraper = JobScrapeManager()
-        jobs_data = scraper.fetch_jobs(sources, roles, locations)
+        remote_pref = profile_dict.get("remote_preference", "any").lower()
+        jobs_data = scraper.fetch_jobs(sources, roles, locations, remote_pref)
         new_count = 0
 
         for job_data in jobs_data:

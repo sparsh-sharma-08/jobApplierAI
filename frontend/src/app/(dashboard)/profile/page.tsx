@@ -48,6 +48,7 @@ export default function ProfilePage() {
     const [skills, setSkills] = useState('');
     const [roles, setRoles] = useState('');
     const [locations, setLocations] = useState('');
+    const [remotePreference, setRemotePreference] = useState('any');
     const [experienceLevel, setExperienceLevel] = useState('fresher');
 
     // Master resume state
@@ -81,6 +82,7 @@ export default function ProfilePage() {
                     setSkills((data.skills || []).join(', '));
                     setRoles((data.preferred_roles || []).join(', '));
                     setLocations((data.preferred_locations || []).join(', '));
+                    setRemotePreference(data.remote_preference || 'any');
                     setExperienceLevel(data.experience_level || 'fresher');
                     if (data.master_resume && Object.keys(data.master_resume).length > 0) {
                         setMasterResume(normalizeResume(data.master_resume));
@@ -105,6 +107,7 @@ export default function ProfilePage() {
                     skills: skills.split(',').map(s => s.trim()).filter(Boolean),
                     preferred_roles: roles.split(',').map(s => s.trim()).filter(Boolean),
                     preferred_locations: locations.split(',').map(s => s.trim()).filter(Boolean),
+                    remote_preference: remotePreference,
                     experience_level: experienceLevel,
                 }),
             });
@@ -275,6 +278,16 @@ export default function ProfilePage() {
                                 <option value="junior">Junior (1-3 years)</option>
                                 <option value="mid">Mid (3-5 years)</option>
                                 <option value="senior">Senior (5+ years)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Remote Preference</label>
+                            <select value={remotePreference} onChange={e => setRemotePreference(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-white/70 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                                <option value="any">Open to Any (Remote, Hybrid, On-site)</option>
+                                <option value="remote">Strictly Remote Only</option>
+                                <option value="hybrid">Hybrid</option>
+                                <option value="onsite">On-site Only</option>
                             </select>
                         </div>
 
