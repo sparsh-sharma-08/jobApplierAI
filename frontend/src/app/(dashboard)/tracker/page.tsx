@@ -8,6 +8,7 @@ import { Briefcase, Building2, MapPin, Loader2, GripVertical, CheckCircle2, Plus
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import LLMProgressBar from '@/components/LLMProgressBar';
+import ConfirmationModal from '@/components/ConfirmationModal';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -141,6 +142,21 @@ export default function TrackerPage() {
     const [jobSearch, setJobSearch] = useState('');
     const [isAddingJob, setIsAddingJob] = useState(false);
 
+    // Modal state
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        type: 'danger' | 'warning' | 'info';
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        type: 'warning'
+    });
+
     useEffect(() => {
         if (!showAddModal) return;
         const fetchPendingJobs = async () => {
@@ -159,25 +175,31 @@ export default function TrackerPage() {
     }, [showAddModal, applications]);
 
     const handleDeleteApplication = async (appId: number) => {
-        if (!confirm('Are you sure you want to remove this job from your tracker?')) return;
+        setConfirmModal({
+            isOpen: true,
+            title: 'Remove Job',
+            message: 'Are you sure you want to remove this job from your tracker? This will move it back to the unsorted list.',
+            type: 'warning',
+            onConfirm: async () => {
+                const token = localStorage.getItem('token');
+                if (!token) return;
 
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        try {
-            const res = await fetch(`${API}/applications/${appId}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                toast.success('Job removed from tracker');
-                setApplications(prev => prev.filter(a => a.id !== appId));
-            } else {
-                toast.error('Failed to remove job');
+                try {
+                    const res = await fetch(`${API}/applications/${appId}`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        toast.success('Job removed from tracker');
+                        setApplications(prev => prev.filter(a => a.id !== appId));
+                    } else {
+                        toast.error('Failed to remove job');
+                    }
+                } catch {
+                    toast.error('Network error. Failed to delete.');
+                }
             }
-        } catch {
-            toast.error('Network error. Failed to delete.');
-        }
+        });
     };
 
     const handleAddJobToTracker = async (jobId: number) => {
@@ -219,6 +241,7 @@ export default function TrackerPage() {
             });
             if (res.ok) {
                 const data = await res.json();
+                console.log(`[Tracker] Fetched ${data.length} applications:`, data);
                 setApplications(data);
             }
         } catch (e) {
@@ -305,6 +328,14 @@ export default function TrackerPage() {
 
     return (
         <div className="h-full flex flex-col space-y-4 max-h-screen">
+            <ConfirmationModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type={confirmModal.type}
+            />
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>

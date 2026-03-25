@@ -239,7 +239,8 @@ RULES:
 - Include 3-5 relevant keywords from the job naturally
 - Do NOT fabricate experience
 - Professional tone, no fluff
-- Return ONLY the summary text, no quotes or labels"""
+- Return ONLY the summary text, no quotes or labels
+- DO NOT start with the job title, a heading, or any Markdown formatting like **. Start directly with the first sentence."""
 
         response = _call_llm_with_retry(
             client=client,
@@ -251,8 +252,22 @@ RULES:
             max_tokens=200
         )
         summary = response.choices[0].message.content.strip()
-        # Clean up: remove quotes, labels, extra whitespace
+        # Clean up: remove quotes, labels, extra whitespace, markdown
         summary = summary.strip('"\'')
+        summary = summary.replace("**", "")
+        
+        # Strip conversational filler from local models (e.g. "Sure, here is the summary: ")
+        colon_idx = summary.find(":")
+        if 0 < colon_idx < 80:
+            prefix = summary[:colon_idx].lower()
+            if any(word in prefix for word in ["sure", "here", "summary", "requested", "objective", "following", "certainly"]):
+                summary = summary[colon_idx+1:].strip()
+        # Remove literal job titles if injected
+        lower_title = job_title.lower()
+        if summary.lower().startswith(lower_title) and len(summary) > len(lower_title) + 5:
+            # e.g., "Frontend Developer - Highly motivated..."
+            summary = re.sub(rf"^{re.escape(job_title)}[^a-zA-Z0-9]*", "", summary, flags=re.IGNORECASE).strip()
+            
         if summary.lower().startswith("career objective"):
             summary = summary.split(":", 1)[-1].strip()
         if summary.lower().startswith("summary"):

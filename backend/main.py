@@ -6,13 +6,13 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Request, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Request, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 import fitz # PyMuPDF
 
 from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application, MockInterview, ColdEmail
@@ -21,7 +21,8 @@ from models.schemas import (
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
     UrlInput,
-    MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate
+    MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate,
+    JobBulkAction
 )
 from core.security import (
     get_password_hash, verify_password, create_access_token, create_refresh_token,
@@ -317,6 +318,7 @@ def list_jobs(
     source: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    exclude_applied: bool = True,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -325,6 +327,8 @@ def list_jobs(
         query = query.filter(Job.source == source)
     if min_score is not None:
         query = query.join(JobScore).filter(JobScore.score >= min_score)
+    if exclude_applied:
+        query = query.filter(~Job.applications.any())
     return query.order_by(Job.fetched_date.desc()).offset(offset).limit(limit).all()
 
 
@@ -362,6 +366,45 @@ def get_job(
     if not job:
         raise HTTPException(404, "Job not found")
     return job
+
+
+@app.post("/jobs/bulk-action")
+def bulk_action_jobs(
+    action: JobBulkAction,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    valid_jobs = db.query(Job).filter(Job.id.in_(action.job_ids), Job.user_id == current_user.id).all()
+    logger.info(f"Bulk application action: {action.action} for job_ids: {action.job_ids} (Found {len(valid_jobs)} valid jobs)")
+    if not valid_jobs:
+        return {"message": "No valid jobs found", "count": 0}
+
+    count = 0
+    if action.action == "delete":
+        for job in valid_jobs:
+            db.query(JobScore).filter(JobScore.job_id == job.id).delete(synchronize_session=False)
+            db.query(Resume).filter(Resume.job_id == job.id).delete(synchronize_session=False)
+            db.delete(job)
+            count += 1
+        db.commit()
+        return {"message": f"Successfully deleted {count} jobs.", "count": count}
+
+    elif action.action == "mark_applied":
+        for job in valid_jobs:
+            # Check if application exists
+            app_req = db.query(Application).filter(Application.job_id == job.id).first()
+            if not app_req:
+                app_req = Application(job_id=job.id, user_id=current_user.id, status="applied", applied_date=datetime.utcnow())
+                db.add(app_req)
+            else:
+                app_req.status = "applied"
+                app_req.applied_date = datetime.utcnow()
+            count += 1
+        db.commit()
+        return {"message": f"Successfully marked {count} jobs as applied.", "count": count}
+        
+    raise HTTPException(status_code=400, detail="Invalid action")
+
 
 
 from fastapi import Body
@@ -427,10 +470,14 @@ def parse_job_url(
     # Parse URL
     from scrapers.url_parser import UrlParserScraper
     scraper = UrlParserScraper()
-    job_data = scraper.parse_url(payload.url)
+    try:
+        job_data = scraper.parse_url(payload.url)
+    except Exception as e:
+        logger.error(f"URL Parsing failed for {payload.url}: {e}")
+        raise HTTPException(status_code=500, detail=f"AI Extraction failed: {str(e)}")
     
     if not job_data:
-        raise HTTPException(status_code=400, detail="Could not extract job from that URL. Please check the link and try again.")
+        raise HTTPException(status_code=400, detail="Could not reach or extract content from that URL. LinkedIn and other major sites may occasionally block our automated requests. Please try again or copy-paste the text manually.")
         
     # Check if we already scraped this exact URL manually
     existing_job = db.query(Job).filter(
@@ -457,7 +504,8 @@ def parse_job_url(
         salary=job_data.get("salary", ""),
         description=job_data["description"],
         apply_link=job_data["apply_link"],
-        fetched_date=datetime.utcnow()
+        fetched_date=datetime.utcnow(),
+        posted_date=datetime.utcnow()
     )
     db.add(new_job)
     db.commit()
@@ -681,10 +729,15 @@ def list_applications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Application).filter(Application.user_id == current_user.id)
-    if status:
-        query = query.filter(Application.status == status)
-    return query.order_by(Application.created_at.desc()).offset(offset).limit(limit).all()
+    try:
+        query = db.query(Application).options(joinedload(Application.job)).filter(Application.user_id == current_user.id)
+        if status:
+            query = query.filter(Application.status == status)
+        apps = query.order_by(Application.created_at.desc()).offset(offset).limit(limit).all()
+        return apps
+    except Exception as e:
+        logger.error(f"[Applications] Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/applications", response_model=ApplicationOut)

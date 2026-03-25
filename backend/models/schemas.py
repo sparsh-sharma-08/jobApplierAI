@@ -82,16 +82,16 @@ class CandidateProfileOut(CandidateProfileCreate):
 # Job
 class JobOut(BaseModel):
     id: int
-    external_id: str
-    source: str
-    company: str
-    role: str
-    location: Optional[str]
-    salary: Optional[str]
-    description: str
-    apply_link: str
-    posted_date: Optional[datetime]
-    fetched_date: Optional[datetime]
+    external_id: Optional[str] = "unknown"
+    source: Optional[str] = "unknown"
+    company: Optional[str] = "Unknown Company"
+    role: Optional[str] = "Unknown Role"
+    location: Optional[str] = None
+    salary: Optional[str] = None
+    description: Optional[str] = ""
+    apply_link: Optional[str] = ""
+    posted_date: Optional[datetime] = None
+    fetched_date: Optional[datetime] = None
     score: Optional["JobScoreOut"] = None
     class Config:
         from_attributes = True
@@ -107,6 +107,10 @@ class UrlInput(BaseModel):
     url: str
 
 JobOut.model_rebuild()
+
+class JobBulkAction(BaseModel):
+    action: str # "delete" or "mark_applied"
+    job_ids: List[int]
 
 
 # Resume

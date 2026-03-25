@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Search, Briefcase, MapPin, Building2, ExternalLink, Loader2, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, XCircle, FileText, Download, Eye, FileSignature, Copy, CheckCheck, Edit3, Save, X, MessageSquare, Mail, Trash2, Link, Plus } from 'lucide-react';
-import LLMProgressBar from '@/components/LLMProgressBar';
 import SkeletonCard from '@/components/SkeletonCard';
 import EmptyState from '@/components/EmptyState';
-import { toast } from 'sonner';
+import LLMProgressBar from '@/components/LLMProgressBar';
+import ConfirmationModal from '@/components/ConfirmationModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
+import { toast } from 'sonner';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -100,6 +101,24 @@ export default function JobsPage() {
     const [copiedColdEmail, setCopiedColdEmail] = useState<number | null>(null);
     const currencySymbol = CURRENCY_SYMBOLS[settings.currency] || '₹';
 
+    // Bulk selection state
+    const [selectedJobs, setSelectedJobs] = useState<Set<number>>(new Set());
+
+    // Modal state
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        type: 'danger' | 'warning' | 'info';
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        type: 'warning'
+    });
+
     const getToken = () => localStorage.getItem('token');
 
     const fetchJobs = useCallback(async () => {
@@ -187,24 +206,63 @@ export default function JobsPage() {
     const handleClearJobs = async () => {
         const token = getToken();
         if (!token) return;
-        if (!confirm('Are you sure you want to clear all unapplied jobs? This action cannot be undone.')) return;
-
-        try {
-            const res = await fetch(`${API}/jobs/clear`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                toast.success(data.message || 'Successfully cleared unapplied jobs!');
-                fetchJobs(); // Refresh the list
-            } else {
-                toast.error('Failed to clear jobs.');
+        
+        setConfirmModal({
+            isOpen: true,
+            title: 'Clear Unapplied Jobs',
+            message: 'Are you sure you want to remove all unapplied jobs from your pipeline? This action cannot be undone.',
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`${API}/jobs/clear`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        toast.success(data.message || 'Successfully cleared unapplied jobs!');
+                        fetchJobs(); // Refresh the list
+                    } else {
+                        toast.error('Failed to clear jobs.');
+                    }
+                } catch {
+                    toast.error('Network error while clearing jobs.');
+                }
             }
-        } catch {
-            toast.error('Network error while clearing jobs.');
-        }
+        });
     };
+
+    const handleBulkAction = async (action: 'delete' | 'mark_applied') => {
+        const token = getToken();
+        if (!token || selectedJobs.size === 0) return;
+        
+        setConfirmModal({
+            isOpen: true,
+            title: action === 'delete' ? 'Delete Selected Jobs' : 'Move to Tracker',
+            message: `Are you sure you want to ${action === 'delete' ? 'permanently delete' : 'mark as applied'} these ${selectedJobs.size} selected jobs?`,
+            type: action === 'delete' ? 'danger' : 'info',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`${API}/jobs/bulk-action`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, job_ids: Array.from(selectedJobs) })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        toast.success(`${data.message}`);
+                        setSelectedJobs(new Set());
+                        fetchJobs();
+                    } else {
+                        toast.error(`Failed to bulk ${action}.`);
+                    }
+                } catch {
+                    toast.error('Network error during bulk action.');
+                }
+            }
+        });
+    };
+
 
     const handleParseUrl = async () => {
         if (!pastingUrl.trim()) return;
@@ -435,14 +493,21 @@ export default function JobsPage() {
         });
     }, [jobs, searchQuery, sourceFilter, sortBy]);
 
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, sourceFilter, sortBy]);
+    useEffect(() => { setCurrentPage(1); setSelectedJobs(new Set()); }, [searchQuery, sourceFilter, sortBy]);
 
     const jobsPerPage = settings.jobsPerPage || 10;
     const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / jobsPerPage));
     const paginatedJobs = useMemo(() => {
         const start = (currentPage - 1) * jobsPerPage;
         return filteredAndSorted.slice(start, start + jobsPerPage);
-    }, [filteredAndSorted, currentPage, jobsPerPage]);
+    }, [currentPage, filteredAndSorted, jobsPerPage]);
+
+    // Handle pagination bounds after delete/filter
+    useEffect(() => {
+        if (currentPage > 1 && currentPage > totalPages) {
+            setCurrentPage(totalPages || 1);
+        }
+    }, [currentPage, totalPages]);
 
     if (loading) {
         return (
@@ -462,6 +527,15 @@ export default function JobsPage() {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <ConfirmationModal
+                    isOpen={confirmModal.isOpen}
+                    onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                    onConfirm={confirmModal.onConfirm}
+                    title={confirmModal.title}
+                    message={confirmModal.message}
+                    type={confirmModal.type}
+                    confirmLabel={confirmModal.type === 'danger' ? 'Delete' : 'Confirm'}
+                />
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-slate-900">Jobs Pipeline</h1>
                     <p className="mt-1 text-slate-500 text-sm font-medium">
@@ -535,6 +609,65 @@ export default function JobsPage() {
                 />
             ) : (
                 <div className="space-y-4">
+                    {paginatedJobs.length > 0 && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-slate-200 px-4 py-3 rounded-xl mb-4 text-sm font-medium text-slate-700 shadow-sm gap-3">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={paginatedJobs.length > 0 && paginatedJobs.every(j => selectedJobs.has(j.id))}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            const next = new Set(selectedJobs);
+                                            paginatedJobs.forEach(j => next.add(j.id));
+                                            setSelectedJobs(next);
+                                        } else {
+                                            const next = new Set(selectedJobs);
+                                            paginatedJobs.forEach(j => next.delete(j.id));
+                                            setSelectedJobs(next);
+                                        }
+                                    }}
+                                    className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                />
+                                <span className="text-slate-600">Select All {filteredAndSorted.length === paginatedJobs.length ? '' : 'on Page'}</span>
+                            </label>
+                            
+                            <AnimatePresence>
+                                {selectedJobs.size > 0 && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        className="flex gap-2 items-center flex-wrap"
+                                    >
+                                        <div className="flex items-center gap-2 mr-2">
+                                            <span className="text-primary-700 font-bold px-2 py-0.5 bg-primary-50 rounded-lg border border-primary-100">{selectedJobs.size}</span>
+                                            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Selected</span>
+                                        </div>
+
+                                        <button onClick={() => handleBulkAction('mark_applied')} className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 whitespace-nowrap rounded-lg shadow-sm">
+                                            <CheckCheck className="w-4 h-4" /> Move to Tracker
+                                        </button>
+                                        <button onClick={() => handleBulkAction('delete')} className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50 whitespace-nowrap rounded-lg shadow-sm">
+                                            <Trash2 className="w-4 h-4" /> Delete Selection
+                                        </button>
+                                        <button 
+                                            onClick={() => setSelectedJobs(new Set())}
+                                            className="px-3 py-1.5 text-xs flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap font-medium"
+                                        >
+                                            <X className="w-4 h-4" /> Clear
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    )}
+
+                    <div className="text-right pr-2">
+                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest opacity-70">
+                            Dashboard Sync: Showing {Math.min(filteredAndSorted.length, (currentPage - 1) * jobsPerPage + 1)}-{Math.min(currentPage * jobsPerPage, filteredAndSorted.length)} of {filteredAndSorted.length} matching jobs
+                        </p>
+                    </div>
+
                     {paginatedJobs.map(job => {
                         const isExpanded = expandedJob === job.id;
                         const score = job.score?.score || 0;
@@ -557,6 +690,19 @@ export default function JobsPage() {
                                 className={`glass-card overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer ${isNewJob ? 'ring-2 ring-primary-400/50 bg-primary-50/10' : ''}`}
                             >
                                 <div className="p-5 flex gap-4">
+                                    <div className="flex-shrink-0 pt-2" onClick={(e) => e.stopPropagation()}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedJobs.has(job.id)}
+                                            onChange={() => {
+                                                const next = new Set(selectedJobs);
+                                                if (next.has(job.id)) next.delete(job.id);
+                                                else next.add(job.id);
+                                                setSelectedJobs(next);
+                                            }}
+                                            className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                        />
+                                    </div>
                                     {/* Score Badge */}
                                     {settings.showScoreBadges && (
                                         <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${getScoreColor(score)} flex items-center justify-center flex-shrink-0 shadow-lg`}>
