@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import logging
 import numpy as np
+import html
 
 try:
     from sklearn.metrics.pairwise import cosine_similarity
@@ -20,6 +21,13 @@ logger = logging.getLogger(__name__)
 
 def normalize_text(text: str) -> str:
     return re.sub(r'[^a-z0-9\s]', ' ', text.lower())
+
+def clean_html(raw_html: str) -> str:
+    if not raw_html:
+        return ""
+    text = html.unescape(raw_html)
+    cleanr = re.compile(r'<.*?>')
+    return re.sub(cleanr, ' ', text)
 
 
 def extract_keywords(text: str) -> set:
@@ -47,7 +55,7 @@ def score_job(
 
     candidate_skills = [s.lower() for s in profile.get("skills", [])]
     candidate_skills_set = set(candidate_skills)
-    description = (job.get("description") or "").lower()
+    description = clean_html(job.get("description") or "").lower()
     role = (job.get("role") or "").lower()
     full_text = description + " " + role
 

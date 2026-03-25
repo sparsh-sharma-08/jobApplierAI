@@ -482,6 +482,76 @@ class LinkedInScraper:
 
 
 # ─────────────────────────────────────────────────────
+# 7. Instahyre  —  Public JSON API (India focused)
+# ─────────────────────────────────────────────────────
+class InstahyreScraper:
+    API_URL = "https://www.instahyre.com/api/v1/job_search"
+
+    def scrape(self, roles: List[str], locations: List[str], max_jobs: int = 30) -> List[Dict[str, Any]]:
+        try:
+            import requests
+            headers = {"User-Agent": "Mozilla/5.0 CareerCopilot/1.0"}
+            proxies = {"http": HTTP_PROXY, "https": HTTP_PROXY} if HTTP_PROXY else None
+            _human_delay(1, 2)
+            
+            job_results = []
+            
+            for role in roles:
+                search_term = role.split()[0] if role else ""
+                params = {"skills": search_term}
+                if locations:
+                    params["location"] = locations[0]
+                    
+                response = requests.get(self.API_URL, params=params, headers=headers, timeout=15, proxies=proxies)
+                response.raise_for_status()
+
+                data = response.json()
+                if "objects" not in data:
+                    continue
+                
+                for item in data.get("objects", []):
+                    if not isinstance(item, dict):
+                        continue
+
+                    job_id = _make_job_id("instahyre", str(item.get("id", "")))
+                    apply_link = item.get("public_url") or f"/job-{item.get('id')}"
+                    if apply_link.startswith("/"):
+                        apply_link = "https://www.instahyre.com" + apply_link
+                    
+                    description = str(item.get("title", "")) + " at " + str(item.get("employer", {}).get("company_name", ""))
+                    
+                    posted_date = _parse_date(item.get("published_at"))
+                    
+                    emp_info = item.get("employer", {})
+                    company = emp_info.get("company_name", "Unknown") if isinstance(emp_info, dict) else "Unknown"
+                    location = ", ".join([loc.get("name", "") for loc in item.get("locations", []) if isinstance(loc, dict)])
+
+                    job_results.append({
+                        "external_id": job_id,
+                        "source": "instahyre",
+                        "company": company,
+                        "role": item.get("title", ""),
+                        "location": location or "India",
+                        "salary": "",
+                        "description": description[:5000],
+                        "apply_link": apply_link,
+                        "posted_date": posted_date,
+                        "raw_data": {"id": item.get("id")}
+                    })
+
+                    if len(job_results) >= max_jobs:
+                        break
+                        
+                if len(job_results) >= max_jobs:
+                     break
+
+            return job_results
+
+        except Exception as e:
+            logger.error(f"Instahyre scrape error: {e}")
+            return []
+
+# ─────────────────────────────────────────────────────
 # Shared helpers
 # ─────────────────────────────────────────────────────
 def _build_keywords(roles: List[str]) -> List[str]:
@@ -521,6 +591,7 @@ class JobScrapeManager:
             "himalayas": HimalayasScraper(),
             "adzuna": AdzunaScraper(),
             "linkedin": LinkedInScraper(),
+            "instahyre": InstahyreScraper(),
         }
 
     def fetch_jobs(
@@ -546,7 +617,7 @@ class JobScrapeManager:
 
             logger.info(f"Fetching from {source}...")
             try:
-                if source in ("remotive", "arbeitnow", "jobicy", "himalayas", "adzuna", "linkedin"):
+                if source in ("remotive", "arbeitnow", "jobicy", "himalayas", "adzuna", "linkedin", "instahyre"):
                     jobs = scraper.scrape(roles, locations, max_jobs_per_source)
                 else:
                     jobs = []

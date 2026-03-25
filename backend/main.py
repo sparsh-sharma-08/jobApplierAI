@@ -364,9 +364,11 @@ def get_job(
     return job
 
 
+from fastapi import Body
+
 @app.post("/jobs/fetch")
 def fetch_jobs(
-    sources: List[str] = None,
+    sources: List[str] = Body(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

@@ -22,3 +22,5 @@ tenacity==8.2.3
 PyMuPDF==1.26.5
 sentence-transformers==2.5.1
 scikit-learn==1.4.1.post1
+transformers==4.38.2
+urllib3<2

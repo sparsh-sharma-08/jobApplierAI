@@ -227,41 +227,41 @@ def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) ->
 
         # ── Styles ──────────────────────────────────────────────
         name_style = ParagraphStyle(
-            'Name', fontName='Times-Bold', fontSize=20, alignment=TA_CENTER,
+            'Name', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER,
             spaceAfter=2, leading=24
         )
         contact_style = ParagraphStyle(
-            'Contact', fontName='Times-Roman', fontSize=9, alignment=TA_CENTER,
+            'Contact', fontName='Helvetica', fontSize=9, alignment=TA_CENTER,
             spaceAfter=4, leading=12
         )
         section_heading_style = ParagraphStyle(
-            'SectionHeading', fontName='Times-Bold', fontSize=11, 
+            'SectionHeading', fontName='Helvetica-Bold', fontSize=11, 
             spaceBefore=6, spaceAfter=2, leading=14
         )
         body_style = ParagraphStyle(
-            'Body', fontName='Times-Roman', fontSize=10, alignment=TA_JUSTIFY,
+            'Body', fontName='Helvetica', fontSize=10, alignment=TA_JUSTIFY,
             spaceAfter=4, leading=13
         )
         project_title_style = ParagraphStyle(
-            'ProjectTitle', fontName='Times-Bold', fontSize=10.5,
+            'ProjectTitle', fontName='Helvetica-Bold', fontSize=10.5,
             spaceAfter=1, spaceBefore=4, leading=13
         )
         bullet_style = ParagraphStyle(
-            'Bullet', fontName='Times-Roman', fontSize=10, leftIndent=18,
+            'Bullet', fontName='Helvetica', fontSize=10, leftIndent=18,
             bulletIndent=8, spaceAfter=2, leading=13, alignment=TA_JUSTIFY
         )
         tech_style = ParagraphStyle(
-            'Tech', fontName='Times-Roman', fontSize=10, leftIndent=18,
+            'Tech', fontName='Helvetica', fontSize=10, leftIndent=18,
             spaceAfter=4, leading=12, textColor=colors.HexColor('#222222')
         )
         edu_left_style = ParagraphStyle(
-            'EduLeft', fontName='Times-Bold', fontSize=10.5, leading=14
+            'EduLeft', fontName='Helvetica-Bold', fontSize=10.5, leading=14
         )
         edu_right_style = ParagraphStyle(
-            'EduRight', fontName='Times-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14
+            'EduRight', fontName='Helvetica-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14
         )
         edu_detail_style = ParagraphStyle(
-            'EduDetail', fontName='Times-Roman', fontSize=10, leftIndent=18, spaceAfter=2, leading=12
+            'EduDetail', fontName='Helvetica', fontSize=10, leftIndent=18, spaceAfter=2, leading=12
         )
 
         story = []
@@ -314,8 +314,8 @@ def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) ->
                 
                 # Title and Date on same line using table
                 header_data = [
-                    [Paragraph(f"<b>{title}</b>", ParagraphStyle('T', fontName='Times-Bold', fontSize=10.5)), 
-                     Paragraph(date_range, ParagraphStyle('D', fontName='Times-Roman', fontSize=10, alignment=TA_RIGHT))]
+                    [Paragraph(f"<b>{title}</b>", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=10.5)), 
+                     Paragraph(date_range, ParagraphStyle('D', fontName='Helvetica', fontSize=10, alignment=TA_RIGHT))]
                 ]
                 t = Table(header_data, colWidths=[4*inch, 3.3*inch])
                 t.setStyle(TableStyle([
@@ -329,7 +329,7 @@ def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) ->
                 # Company and Location
                 comp_loc = company
                 if location: comp_loc += f", {location}"
-                story.append(Paragraph(f"<i>{comp_loc}</i>", ParagraphStyle('C', fontName='Times-Italic', fontSize=10, spaceAfter=3)))
+                story.append(Paragraph(f"<i>{comp_loc}</i>", ParagraphStyle('C', fontName='Helvetica-Oblique', fontSize=10, spaceAfter=3)))
 
                 # Highlights (Bullets)
                 for h in highlights:
@@ -393,8 +393,8 @@ def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) ->
                     left_text += f" — {institution}"
                 
                 edu_table = Table(
-                    [[Paragraph(left_text, ParagraphStyle('EduLeft', fontName='Times-Bold', fontSize=10.5, leading=14)), 
-                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduRight', fontName='Times-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14))]],
+                    [[Paragraph(left_text, ParagraphStyle('EduLeft', fontName='Helvetica-Bold', fontSize=10.5, leading=14)), 
+                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduRight', fontName='Helvetica-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14))]],
                     colWidths=[(doc_pdf.width * 0.75), (doc_pdf.width * 0.25)]
                 )
                 edu_table.setStyle(TableStyle([
@@ -407,7 +407,7 @@ def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) ->
                 story.append(edu_table)
                 
                 if gpa:
-                    story.append(Paragraph(f"• GPA: {gpa}", ParagraphStyle('EduDetail', fontName='Times-Roman', fontSize=10, leftIndent=18, spaceAfter=2, leading=12)))
+                    story.append(Paragraph(f"• GPA: {gpa}", ParagraphStyle('EduDetail', fontName='Helvetica', fontSize=10, leftIndent=18, spaceAfter=2, leading=12)))
             
             add_hr()
 
@@ -470,31 +470,31 @@ def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
         )
 
         name_style = ParagraphStyle(
-            'Name', fontName='Times-Bold', fontSize=20, alignment=TA_CENTER,
+            'Name', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER,
             spaceAfter=2, leading=24
         )
         contact_style = ParagraphStyle(
-            'Contact', fontName='Times-Roman', fontSize=9, alignment=TA_CENTER,
+            'Contact', fontName='Helvetica', fontSize=9, alignment=TA_CENTER,
             spaceAfter=4, leading=12
         )
         section_heading_style = ParagraphStyle(
-            'SectionHeading', fontName='Times-Bold', fontSize=11, 
+            'SectionHeading', fontName='Helvetica-Bold', fontSize=11, 
             spaceBefore=6, spaceAfter=2, leading=14
         )
         body_style = ParagraphStyle(
-            'Body', fontName='Times-Roman', fontSize=10, alignment=TA_JUSTIFY,
+            'Body', fontName='Helvetica', fontSize=10, alignment=TA_JUSTIFY,
             spaceAfter=4, leading=13
         )
         project_title_style = ParagraphStyle(
-            'ProjectTitle', fontName='Times-Bold', fontSize=10.5,
+            'ProjectTitle', fontName='Helvetica-Bold', fontSize=10.5,
             spaceAfter=1, spaceBefore=4, leading=13
         )
         bullet_style = ParagraphStyle(
-            'Bullet', fontName='Times-Roman', fontSize=10, leftIndent=18,
+            'Bullet', fontName='Helvetica', fontSize=10, leftIndent=18,
             firstLineIndent=-10, spaceAfter=2, leading=13
         )
         tech_style = ParagraphStyle(
-            'Tech', fontName='Times-Italic', fontSize=9, leftIndent=18,
+            'Tech', fontName='Helvetica-Oblique', fontSize=9, leftIndent=18,
             spaceBefore=1, spaceAfter=4, textColor=colors.grey
         )
 
@@ -548,8 +548,8 @@ def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
                 highlights = exp.get("highlights", [])
                 
                 header_data = [
-                    [Paragraph(f"<b>{title}</b>", ParagraphStyle('T', fontName='Times-Bold', fontSize=10.5)), 
-                     Paragraph(date_range, ParagraphStyle('D', fontName='Times-Roman', fontSize=10, alignment=TA_RIGHT))]
+                    [Paragraph(f"<b>{title}</b>", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=10.5)), 
+                     Paragraph(date_range, ParagraphStyle('D', fontName='Helvetica', fontSize=10, alignment=TA_RIGHT))]
                 ]
                 t = Table(header_data, colWidths=[4*inch, 3.3*inch])
                 t.setStyle(TableStyle([
@@ -562,7 +562,7 @@ def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
 
                 comp_loc = company
                 if location: comp_loc += f", {location}"
-                story.append(Paragraph(f"<i>{comp_loc}</i>", ParagraphStyle('C', fontName='Times-Italic', fontSize=10, spaceAfter=3)))
+                story.append(Paragraph(f"<i>{comp_loc}</i>", ParagraphStyle('C', fontName='Helvetica-Oblique', fontSize=10, spaceAfter=3)))
 
                 for h in highlights:
                     parts = h.split(" ", 1)
@@ -613,8 +613,8 @@ def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
                     left_text += f" — {institution}"
                 
                 edu_table = Table(
-                    [[Paragraph(left_text, ParagraphStyle('EduL', fontName='Times-Bold', fontSize=10.5, leading=14)), 
-                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduR', fontName='Times-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14))]],
+                    [[Paragraph(left_text, ParagraphStyle('EduL', fontName='Helvetica-Bold', fontSize=10.5, leading=14)), 
+                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduR', fontName='Helvetica-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14))]],
                     colWidths=[4*inch, 3.3*inch]
                 )
                 edu_table.setStyle(TableStyle([
@@ -624,7 +624,7 @@ def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
                 ]))
                 story.append(edu_table)
                 if gpa:
-                    story.append(Paragraph(f"• GPA: {gpa}", ParagraphStyle('GPA', fontName='Times-Roman', fontSize=10, leftIndent=18, spaceAfter=2, leading=12)))
+                    story.append(Paragraph(f"• GPA: {gpa}", ParagraphStyle('GPA', fontName='Helvetica', fontSize=10, leftIndent=18, spaceAfter=2, leading=12)))
             
             add_hr()
 

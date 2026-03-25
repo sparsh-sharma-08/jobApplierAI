@@ -19,7 +19,7 @@ export interface AppSettings {
     highlightNewJobs: boolean;
 }
 
-const ALL_SOURCES = ['remotive', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin'];
+const ALL_SOURCES = ['remotive', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin', 'instahyre'];
 
 const DEFAULT_SETTINGS: AppSettings = {
     currency: 'INR',
@@ -47,6 +47,7 @@ export const SOURCE_LABELS: Record<string, string> = {
     himalayas: 'Himalayas',
     adzuna: 'Adzuna',
     linkedin: 'LinkedIn',
+    instahyre: 'Instahyre',
 };
 
 export function useSettings() {
