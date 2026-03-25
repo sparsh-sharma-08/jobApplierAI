@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Briefcase, UserCircle, Settings, LogOut, Sparkles, KanbanSquare } from 'lucide-react';
+import { LayoutDashboard, Briefcase, UserCircle, Settings, LogOut, Sparkles, KanbanSquare, Moon, Sun, Monitor } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { apiFetch } from '@/lib/api';
+import { useSettings } from '@/hooks/useSettings';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -21,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const router = useRouter();
     const pathname = usePathname();
     const [user, setUser] = useState<any>(null);
+    const { settings, setSettings } = useSettings();
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -53,8 +55,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!user) return null;
 
+    const ThemeToggle = () => (
+        <div className="flex items-center gap-1 p-1 bg-slate-800/50 rounded-lg border border-white/5 mb-4 mx-4">
+            {(['light', 'dark', 'system'] as const).map((t) => (
+                <button
+                    key={t}
+                    onClick={() => setSettings({ theme: t })}
+                    className={`flex-1 flex items-center justify-center py-1.5 rounded-md transition-all ${
+                        settings.theme === t 
+                        ? 'bg-primary-500 text-white shadow-sm' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title={`${t.charAt(0).toUpperCase() + t.slice(1)} Mode`}
+                >
+                    {t === 'light' && <Sun className="w-4 h-4" />}
+                    {t === 'dark' && <Moon className="w-4 h-4" />}
+                    {t === 'system' && <Monitor className="w-4 h-4" />}
+                </button>
+            ))}
+        </div>
+    );
+
     return (
-        <div className="h-screen flex overflow-hidden bg-slate-50">
+        <div className="h-screen flex overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
             {/* Sidebar */}
             <aside className="hidden md:flex md:flex-col md:w-64 bg-gradient-to-b from-slate-900 via-primary-950 to-slate-900 text-white shadow-2xl flex-shrink-0 z-20">
                 <div className="p-6 border-b border-white/10">
@@ -86,6 +109,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         );
                     })}
                 </nav>
+
+                <ThemeToggle />
 
                 {/* AI status card */}
                 <div className="p-4 m-4 rounded-xl bg-gradient-to-br from-primary-600/20 to-secondary-600/20 border border-primary-500/20">

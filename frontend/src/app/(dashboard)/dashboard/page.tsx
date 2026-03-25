@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Award, Target, TrendingUp, FileCheck, Briefcase, RefreshCw, Loader2, ArrowRight, FileText, Upload, Sparkles, Building2, MapPin, ChevronRight, BarChart3, Zap, Clock, AlertTriangle } from 'lucide-react';
+import { Award, Target, TrendingUp, FileCheck, Briefcase, RefreshCw, Loader2, ArrowRight, FileText, Upload, Sparkles, Building2, MapPin, ChevronRight, BarChart3, Zap, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import LLMProgressBar from '@/components/LLMProgressBar';
 import SkeletonCard from '@/components/SkeletonCard';
@@ -62,12 +62,7 @@ export default function DashboardPage() {
 
             if (jobsRes.ok) {
                 const data = await jobsRes.json();
-                // Map application status onto job.status
-                const jobsWithStatus = data.map((job: Job) => ({
-                    ...job,
-                    status: AppsDict[job.id] || 'saved'
-                }));
-                setJobs(jobsWithStatus);
+                setJobs(data);
             }
             if (profileRes.ok) {
                 const profileData = await profileRes.json();
@@ -186,9 +181,9 @@ export default function DashboardPage() {
     if (loading) {
         return (
             <div className="space-y-6">
-                <div className="h-32 bg-slate-200 rounded-2xl animate-pulse"></div>
+                <div className="h-32 bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse"></div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-slate-200 rounded-xl animate-pulse"></div>)}
+                    {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse"></div>)}
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-1"><SkeletonCard /></div>
@@ -200,12 +195,12 @@ export default function DashboardPage() {
 
     if (error) {
         return (
-            <div className="p-6 bg-red-50 text-red-600 rounded-2xl border border-red-100 flex items-center justify-between">
+            <div className="p-6 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl border border-red-100 dark:border-red-900/30 flex items-center justify-between">
                 <div>
                     <h3 className="font-semibold text-lg">Failed to load dashboard</h3>
                     <p className="text-sm mt-1">{error}</p>
                 </div>
-                <button onClick={fetchData} className="px-4 py-2 bg-white text-red-600 font-medium rounded-xl border border-red-200 hover:bg-red-50 transition-colors shadow-sm">
+                <button onClick={fetchData} className="px-4 py-2 bg-white dark:bg-slate-800 text-red-600 dark:text-red-400 font-medium rounded-xl border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors shadow-sm">
                     Retry
                 </button>
             </div>
@@ -248,19 +243,19 @@ export default function DashboardPage() {
             {/* Setup Checklist (if incomplete) */}
             {(!hasProfile || !hasMasterResume) && (
                 <div className="glass-card p-5 border-l-4 border-amber-400">
-                    <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-3">
+                    <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
                         <Zap className="w-4 h-4 text-amber-500" /> Get Started — Complete Setup
                     </h3>
                     <div className="space-y-2">
-                        <Link href="/profile" className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${hasProfile ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}>
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${hasProfile ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                        <Link href="/profile" className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${hasProfile ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${hasProfile ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                                 {hasProfile ? '✓' : '1'}
                             </div>
                             <span className="text-sm font-medium">Set up your profile</span>
                             {!hasProfile && <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />}
                         </Link>
-                        <Link href="/profile" className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${hasMasterResume ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}>
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${hasMasterResume ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                        <Link href="/profile" className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${hasMasterResume ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${hasMasterResume ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                                 {hasMasterResume ? '✓' : '2'}
                             </div>
                             <span className="text-sm font-medium">Upload your master resume (PDF)</span>
@@ -283,8 +278,8 @@ export default function DashboardPage() {
                             <metric.icon className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <span className="text-2xl font-bold text-slate-900">{metric.value}</span>
-                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{metric.label}</p>
+                            <span className="text-2xl font-bold text-slate-900 dark:text-white">{metric.value}</span>
+                            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">{metric.label}</p>
                         </div>
                     </div>
                 ))}
@@ -298,7 +293,7 @@ export default function DashboardPage() {
                     {/* Skill Gap Analysis Widget */}
                     <div className="glass-card p-5">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+                            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <AlertTriangle className="w-4 h-4 text-rose-500" /> Skill Gaps
                             </h2>
                         </div>
@@ -316,10 +311,10 @@ export default function DashboardPage() {
                                     {stats.skill_gaps.map(gap => (
                                         <div key={gap.skill}>
                                             <div className="flex justify-between text-xs mb-1.5">
-                                                <span className="font-semibold text-slate-700">{gap.skill}</span>
-                                                <span className="text-rose-600 font-medium">{gap.percentage}%</span>
+                                                <span className="font-semibold text-slate-700 dark:text-slate-200">{gap.skill}</span>
+                                                <span className="text-rose-600 dark:text-rose-400 font-medium">{gap.percentage}%</span>
                                             </div>
-                                            <div className="w-full bg-slate-100 rounded-full h-1.5">
+                                            <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-1.5">
                                                 <div className="bg-rose-400 h-1.5 rounded-full" style={{ width: `${gap.percentage}%` }}></div>
                                             </div>
                                         </div>
@@ -332,7 +327,7 @@ export default function DashboardPage() {
                     {/* Application Funnel Widget */}
                     <div className="glass-card p-5">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+                            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <TrendingUp className="w-4 h-4 text-emerald-500" /> Application Pipeline
                             </h2>
                         </div>
@@ -345,10 +340,10 @@ export default function DashboardPage() {
                             ].map((stage) => (
                                 <div key={stage.label}>
                                     <div className="flex justify-between text-xs mb-1">
-                                        <span className="font-medium text-slate-700">{stage.label}</span>
-                                        <span className="font-bold text-slate-900">{stage.count}</span>
+                                        <span className="font-medium text-slate-700 dark:text-slate-300">{stage.label}</span>
+                                        <span className="font-bold text-slate-900 dark:text-white">{stage.count}</span>
                                     </div>
-                                    <div className={`w-full h-2 rounded-full ${stage.bg}`}>
+                                    <div className={`w-full h-2 rounded-full ${stage.bg} dark:bg-slate-700`}>
                                         <div className={`h-2 rounded-full transition-all duration-500 ${stage.color}`} style={{ width: `${Math.min(100, Math.max(2, (stage.count / Math.max(1, stats.total_jobs)) * 100))}%` }}></div>
                                     </div>
                                 </div>
@@ -362,10 +357,10 @@ export default function DashboardPage() {
                     {/* Top Matches */}
                     <div className="glass-card p-5">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+                            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-amber-500" /> Top Matches
                             </h2>
-                            <Link href="/jobs" className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                            <Link href="/jobs" className="text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1">
                                 View all <ArrowRight className="w-3 h-3" />
                             </Link>
                         </div>
@@ -377,18 +372,25 @@ export default function DashboardPage() {
                         ) : (
                             <div className="space-y-2">
                                 {topJobs.map(job => (
-                                    <Link key={job.id} href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
+                                    <Link key={job.id} href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
                                         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getScoreGradient(job.score?.score || 0)} flex items-center justify-center flex-shrink-0 shadow`}>
                                             <span className="text-white font-bold text-sm">{job.score?.score}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-slate-900 text-sm truncate">{job.role}</p>
-                                            <p className="text-xs text-slate-500 flex items-center gap-1">
-                                                <Building2 className="w-3 h-3" />{job.company}
-                                                {job.location && <><span className="text-slate-300 mx-1">·</span><MapPin className="w-3 h-3" />{job.location}</>}
-                                            </p>
+                                            <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{job.role}</p>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                                    <Building2 className="w-3 h-3" />{job.company}
+                                                    {job.location && <><span className="text-slate-300 dark:text-slate-600 mx-1">·</span><MapPin className="w-3 h-3" />{job.location}</>}
+                                                </p>
+                                                {job.status !== 'saved' && (
+                                                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
+                                                        <CheckCircle2 className="w-2.5 h-2.5" /> Tracked
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary-500 transition-colors" />
+                                        <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 transition-colors" />
                                     </Link>
                                 ))}
                             </div>
@@ -398,10 +400,10 @@ export default function DashboardPage() {
                     {/* Recent Jobs */}
                     <div className="glass-card p-5">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+                            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <Clock className="w-4 h-4 text-blue-500" /> Recently Added
                             </h2>
-                            <Link href="/jobs" className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                            <Link href="/jobs" className="text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1">
                                 View all <ArrowRight className="w-3 h-3" />
                             </Link>
                         </div>
@@ -413,19 +415,26 @@ export default function DashboardPage() {
                         ) : (
                             <div className="space-y-2">
                                 {recentJobs.map(job => (
-                                    <Link key={job.id} href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
-                                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-                                            <Building2 className="w-4 h-4 text-slate-400" />
+                                    <Link key={job.id} href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+                                            <Building2 className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-slate-900 text-sm truncate">{job.role}</p>
-                                            <p className="text-xs text-slate-500">{job.company} · {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                                            <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{job.role}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">{job.company} · {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                                                {job.status !== 'saved' && (
+                                                    <span className="flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
+                                                        <CheckCircle2 className="w-2.5 h-2.5" /> Tracked
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${job.source === 'remotive' ? 'bg-green-50 text-green-600' :
-                                            job.source === 'jobicy' ? 'bg-purple-50 text-purple-600' :
-                                                job.source === 'himalayas' ? 'bg-sky-50 text-sky-600' :
-                                                    job.source === 'arbeitnow' ? 'bg-teal-50 text-teal-600' :
-                                                        'bg-slate-50 text-slate-500'
+                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${job.source === 'remotive' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' :
+                                            job.source === 'jobicy' ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' :
+                                                job.source === 'himalayas' ? 'bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400' :
+                                                    job.source === 'arbeitnow' ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400' :
+                                                        'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                                             }`}>{job.source}</span>
                                     </Link>
                                 ))}
@@ -439,38 +448,38 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Link href="/jobs" className="glass-card p-5 hover:shadow-xl transition-all group border-l-4 border-primary-400">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center">
-                            <Briefcase className="w-5 h-5 text-primary-600" />
+                        <div className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center">
+                            <Briefcase className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-slate-900">Jobs Pipeline</h3>
-                            <p className="text-xs text-slate-500">Browse, filter & generate resumes</p>
+                            <h3 className="font-semibold text-slate-900 dark:text-white">Jobs Pipeline</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Browse, filter & generate resumes</p>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:translate-x-1 transition-transform" />
                     </div>
                 </Link>
                 <Link href="/profile" className="glass-card p-5 hover:shadow-xl transition-all group border-l-4 border-emerald-400">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                            <Upload className="w-5 h-5 text-emerald-600" />
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                            <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-slate-900">Master Resume</h3>
-                            <p className="text-xs text-slate-500">{hasMasterResume ? '✅ Uploaded & approved' : 'Upload your PDF resume'}</p>
+                            <h3 className="font-semibold text-slate-900 dark:text-white">Master Resume</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{hasMasterResume ? '✅ Uploaded & approved' : 'Upload your PDF resume'}</p>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:translate-x-1 transition-transform" />
                     </div>
                 </Link>
                 <Link href="/settings" className="glass-card p-5 hover:shadow-xl transition-all group border-l-4 border-blue-400">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                            <FileText className="w-5 h-5 text-blue-600" />
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div className="flex-1">
-                            <h3 className="font-semibold text-slate-900">Settings</h3>
-                            <p className="text-xs text-slate-500">Sources, preferences & more</p>
+                            <h3 className="font-semibold text-slate-900 dark:text-white">Settings</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Sources, preferences & more</p>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:translate-x-1 transition-transform" />
                     </div>
                 </Link>
             </div>
@@ -478,13 +487,13 @@ export default function DashboardPage() {
             {/* Source Distribution */}
             {Object.keys(stats.sources).length > 0 && (
                 <div className="glass-card p-5">
-                    <h2 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <h2 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <BarChart3 className="w-4 h-4 text-primary-500" /> Jobs by Source
                     </h2>
                     <div className="flex flex-wrap gap-3">
                         {Object.entries(stats.sources).sort((a, b) => b[1] - a[1]).map(([source, count]) => (
-                            <div key={source} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
-                                <span className="text-sm font-semibold text-slate-700 capitalize">{source}</span>
+                            <div key={source} className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/5 rounded-xl">
+                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 capitalize">{source}</span>
                                 <span className="text-xs font-bold text-white bg-gradient-to-r from-primary-500 to-primary-600 px-2 py-0.5 rounded-md">{count}</span>
                             </div>
                         ))}

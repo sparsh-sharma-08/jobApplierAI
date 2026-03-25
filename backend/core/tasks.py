@@ -39,6 +39,10 @@ celery_app.conf.update(
             'schedule': crontab(day_of_week='sun', hour=0, minute=0),
             'args': (15,)
         },
+        'weekly-top-matches-digest': {
+            'task': 'weekly_digest_task',
+            'schedule': crontab(day_of_week='mon', hour=9, minute=0),
+        },
     }
 )
 
@@ -235,5 +239,74 @@ def clean_old_jobs_task(days_old: int = 15):
     except Exception as e:
         db.rollback()
         logger.error(f"Error cleaning old jobs: {e}")
+    finally:
+        db.close()
+
+
+from services.email_service import EmailService
+
+@celery_app.task(name="weekly_digest_task")
+def weekly_digest_task():
+    """Weekly task to send top matches to users."""
+    logger.info("Starting weekly_digest_task")
+    db: Session = SessionLocal()
+    try:
+        # Find all users with weekly digest enabled
+        profiles = db.query(CandidateProfile).filter(CandidateProfile.weekly_digest == 1).all()
+        
+        emails_sent = 0
+        for profile in profiles:
+            user = profile.user
+            if not user or not user.email:
+                continue
+
+            # Fetch top 5 jobs from the last 7 days with score > 60
+            seven_days_ago = datetime.utcnow() - timedelta(days=7)
+            top_jobs_query = (
+                db.query(Job)
+                .join(JobScore)
+                .filter(
+                    Job.user_id == user.id,
+                    Job.fetched_date >= seven_days_ago
+                )
+                .order_by(JobScore.score.desc())
+                .limit(5)
+            )
+            top_jobs = top_jobs_query.all()
+
+            if not top_jobs:
+                logger.info(f"No top matches found for user {user.email} this week. Skipping email.")
+                continue
+
+            # Format jobs for template
+            formatted_jobs = []
+            for j in top_jobs:
+                formatted_jobs.append({
+                    "role": j.role,
+                    "company": j.company,
+                    "location": j.location or "Remote",
+                    "score": j.score.score if j.score else 0,
+                    "apply_link": j.apply_link
+                })
+
+            # Generate HTML and send email
+            html = EmailService.get_weekly_digest_template(
+                user_name=profile.name or user.email.split('@')[0],
+                jobs=formatted_jobs
+            )
+            
+            success = EmailService.send_email(
+                to_email=user.email,
+                subject="🔥 Your Weekly Top Job Matches are Here!",
+                html_content=html
+            )
+            
+            if success:
+                emails_sent += 1
+
+        logger.info(f"Weekly digest completed. Sent {emails_sent} emails.")
+        return {"emails_sent": emails_sent}
+    except Exception as e:
+        logger.error(f"Error in weekly_digest_task: {e}")
     finally:
         db.close()

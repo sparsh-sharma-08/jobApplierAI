@@ -47,6 +47,7 @@ class CandidateProfile(Base):
     min_salary = Column(Integer)
     target_companies = Column(JSON)  # list of strings
     master_resume = Column(JSON)  # structured resume data
+    weekly_digest = Column(Integer, default=1)  # 1 for True, 0 for False (for broader DB compatibility)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user = relationship("User", back_populates="profile")
 

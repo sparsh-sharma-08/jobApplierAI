@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 
 export interface AppSettings {
     // Display
@@ -17,11 +17,14 @@ export interface AppSettings {
     // Notifications
     showScoreBadges: boolean;
     highlightNewJobs: boolean;
+
+    // Theme
+    theme: 'light' | 'dark' | 'system';
 }
 
-const ALL_SOURCES = ['remotive', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin', 'instahyre'];
+export const ALL_SOURCES = ['remotive', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin', 'instahyre'];
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
     currency: 'INR',
     defaultSort: 'score',
     jobsPerPage: 50,
@@ -29,9 +32,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     autoDownloadResume: false,
     showScoreBadges: true,
     highlightNewJobs: true,
+    theme: 'system',
 };
 
-const STORAGE_KEY = 'careercopilot_settings';
+export const STORAGE_KEY = 'careercopilot_settings';
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
     INR: '₹',
@@ -50,35 +54,25 @@ export const SOURCE_LABELS: Record<string, string> = {
     instahyre: 'Instahyre',
 };
 
-export function useSettings() {
-    const [settings, setSettingsState] = useState<AppSettings>(DEFAULT_SETTINGS);
-    const [loaded, setLoaded] = useState(false);
-
-    useEffect(() => {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                setSettingsState({ ...DEFAULT_SETTINGS, ...parsed });
-            }
-        } catch { }
-        setLoaded(true);
-    }, []);
-
-    const setSettings = useCallback((updater: Partial<AppSettings> | ((prev: AppSettings) => AppSettings)) => {
-        setSettingsState(prev => {
-            const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { }
-            return next;
-        });
-    }, []);
-
-    const resetSettings = useCallback(() => {
-        setSettingsState(DEFAULT_SETTINGS);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS)); } catch { }
-    }, []);
-
-    return { settings, setSettings, resetSettings, loaded };
+export interface SettingsContextType {
+    settings: AppSettings;
+    setSettings: (updater: Partial<AppSettings> | ((prev: AppSettings) => AppSettings)) => void;
+    resetSettings: () => void;
+    loaded: boolean;
 }
 
-export { ALL_SOURCES };
+export const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+
+export function useSettings() {
+    const context = useContext(SettingsContext);
+    if (!context) {
+        // Fallback for when context is not available (e.g. during initial SSR)
+        return {
+            settings: DEFAULT_SETTINGS,
+            setSettings: () => {},
+            resetSettings: () => {},
+            loaded: false
+        };
+    }
+    return context;
+}

@@ -318,7 +318,7 @@ def list_jobs(
     source: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-    exclude_applied: bool = True,
+    exclude_applied: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -329,7 +329,13 @@ def list_jobs(
         query = query.join(JobScore).filter(JobScore.score >= min_score)
     if exclude_applied:
         query = query.filter(~Job.applications.any())
-    return query.order_by(Job.fetched_date.desc()).offset(offset).limit(limit).all()
+    jobs = query.order_by(Job.fetched_date.desc()).offset(offset).limit(limit).all()
+    for job in jobs:
+        if job.applications:
+            job.status = job.applications[0].status
+        else:
+            job.status = "saved"
+    return jobs
 
 
 @app.delete("/jobs/clear")
@@ -365,6 +371,10 @@ def get_job(
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(404, "Job not found")
+    if job.applications:
+        job.status = job.applications[0].status
+    else:
+        job.status = "saved"
     return job
 
 
@@ -749,6 +759,11 @@ def create_application(
     job = db.query(Job).filter(Job.id == data.job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(404, "Job not found")
+
+    # Check if application already exists for this job and user
+    existing_app = db.query(Application).filter(Application.job_id == data.job_id, Application.user_id == current_user.id).first()
+    if existing_app:
+        raise HTTPException(status_code=400, detail="This job is already in your tracker.")
 
     app_record = Application(job_id=data.job_id, notes=data.notes, user_id=current_user.id)
     db.add(app_record)

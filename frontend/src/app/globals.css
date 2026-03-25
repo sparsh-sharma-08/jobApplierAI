@@ -7,20 +7,45 @@
     --gradient-secondary: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%);
     --gradient-accent: linear-gradient(135deg, #6366f1 0%, #14b8a6 100%);
     --gradient-bg: linear-gradient(135deg, #eef2ff 0%, #f0fdfa 50%, #e0e7ff 100%);
+    --bg-main: #f8fafc;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+    --gradient-bg: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #020617 100%);
+    --bg-main: #0f172a; /* Slate 900 */
+    --text-main: #f1f5f9; /* Slate 100 */
+    --text-muted: #94a3b8; /* Slate 400 */
+    --glass-bg: rgba(15, 23, 42, 0.8);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --card-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
 }
 
 body {
     background: var(--gradient-bg);
+    color: var(--text-main);
     min-height: 100vh;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 @layer utilities {
     .glass-panel {
-        @apply bg-white/80 backdrop-blur-xl border border-white/40 shadow-lg;
+        background: var(--glass-bg);
+        backdrop-filter: blur(16px);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--card-shadow);
     }
 
     .glass-card {
-        @apply bg-white/90 backdrop-blur-lg border border-white/50 shadow-md rounded-2xl;
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--card-shadow);
+        border-radius: 1rem;
     }
 
     .btn-primary {

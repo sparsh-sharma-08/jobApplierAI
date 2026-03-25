@@ -48,36 +48,36 @@ function SortableCard({ app, onDelete }: { app: Application, onDelete: (id: numb
             style={style}
             {...attributes}
             {...listeners}
-            className={`bg-white border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-primary-500 border-primary-500 z-50 scale-105 shadow-xl rotate-2' : 'border-slate-200 hover:border-slate-300'}`}
+            className={`bg-white dark:bg-slate-900 border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-primary-500 border-primary-500 z-50 scale-105 shadow-xl rotate-2' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}`}
         >
             <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center flex-shrink-0 shadow-inner">
-                    <span className="font-bold text-slate-500 text-lg uppercase">{app.job.company.charAt(0)}</span>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center flex-shrink-0 shadow-inner">
+                    <span className="font-bold text-slate-500 dark:text-slate-400 text-lg uppercase">{app.job.company.charAt(0)}</span>
                 </div>
                 <button
                     onPointerDown={(e) => { e.stopPropagation(); }}
                     onClick={(e) => { e.stopPropagation(); onDelete(app.id); }}
-                    className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                     title="Remove Job"
                 >
                     <Trash2 className="w-4 h-4" />
                 </button>
             </div>
 
-            <h3 className="font-bold text-slate-800 text-sm leading-tight mb-2 line-clamp-2">{app.job.role}</h3>
+            <h3 className="font-bold text-slate-800 dark:text-white text-sm leading-tight mb-2 line-clamp-2">{app.job.role}</h3>
 
             <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" />
                     <span className="truncate">{app.job.company}</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 dark:text-slate-600" />
                     <span className="truncate">{app.job.location || 'Remote'}</span>
                 </div>
 
                 {app.job.salary && (
-                    <div className="mt-3 inline-flex items-center px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider bg-green-50 text-green-700 border border-green-200">
+                    <div className="mt-3 inline-flex items-center px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/40">
                         {app.job.salary}
                     </div>
                 )}
@@ -91,12 +91,12 @@ function SortableCard({ app, onDelete }: { app: Application, onDelete: (id: numb
 function KanbanColumn({ id, title, color, applications, onDelete }: { id: string, title: string, color: string, applications: Application[], onDelete: (id: number) => void }) {
     const { setNodeRef, isOver } = useDroppable({ id });
 
-    const colorMap: Record<string, { bg: string, border: string, text: string, grad: string, over: string, dropBorder: string, dropText: string }> = {
-        slate: { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700', grad: 'from-slate-400 to-slate-500', over: 'border-slate-400 shadow-slate-200 backdrop-blur-sm bg-slate-100/80 shadow-inner', dropBorder: 'border-slate-300', dropText: 'text-slate-500' },
-        amber: { bg: 'bg-amber-50/50', border: 'border-amber-200', text: 'text-amber-800', grad: 'from-amber-400 to-amber-500', over: 'border-amber-400 shadow-amber-200 backdrop-blur-sm bg-amber-50 shadow-inner', dropBorder: 'border-amber-300', dropText: 'text-amber-500' },
-        blue: { bg: 'bg-blue-50/50', border: 'border-blue-200', text: 'text-blue-800', grad: 'from-blue-400 to-blue-500', over: 'border-blue-400 shadow-blue-200 backdrop-blur-sm bg-blue-50 shadow-inner', dropBorder: 'border-blue-300', dropText: 'text-blue-500' },
-        emerald: { bg: 'bg-emerald-50/50', border: 'border-emerald-200', text: 'text-emerald-800', grad: 'from-emerald-400 to-emerald-500', over: 'border-emerald-400 shadow-emerald-200 backdrop-blur-sm bg-emerald-50 shadow-inner', dropBorder: 'border-emerald-300', dropText: 'text-emerald-500' },
-        rose: { bg: 'bg-rose-50/50', border: 'border-rose-200', text: 'text-rose-800', grad: 'from-rose-400 to-rose-500', over: 'border-rose-400 shadow-rose-200 backdrop-blur-sm bg-rose-50 shadow-inner', dropBorder: 'border-rose-300', dropText: 'text-rose-500' }
+    const colorMap: Record<string, { bg: string, border: string, text: string, grad: string, over: string, dropBorder: string, dropText: string, header: string }> = {
+        slate: { bg: 'bg-slate-50 dark:bg-slate-900/40', border: 'border-slate-200 dark:border-slate-800', text: 'text-slate-700 dark:text-slate-300', grad: 'from-slate-400 to-slate-500', over: 'border-slate-400 dark:border-slate-500 shadow-slate-200 dark:shadow-slate-900 backdrop-blur-sm bg-slate-100/80 dark:bg-slate-800/80 shadow-inner', dropBorder: 'border-slate-300 dark:border-slate-700', dropText: 'text-slate-500 dark:text-slate-500', header: 'bg-white/50 dark:bg-slate-900/50' },
+        amber: { bg: 'bg-amber-50/50 dark:bg-amber-900/10', border: 'border-amber-200 dark:border-amber-900/30', text: 'text-amber-800 dark:text-amber-400', grad: 'from-amber-400 to-amber-500', over: 'border-amber-400 dark:border-amber-500 shadow-amber-200 dark:shadow-amber-900 backdrop-blur-sm bg-amber-50 dark:bg-amber-900/20 shadow-inner', dropBorder: 'border-amber-300 dark:border-amber-700', dropText: 'text-amber-500 dark:text-amber-500', header: 'bg-amber-100/30 dark:bg-amber-900/20' },
+        blue: { bg: 'bg-blue-50/50 dark:bg-blue-900/10', border: 'border-blue-200 dark:border-blue-900/30', text: 'text-blue-800 dark:text-blue-400', grad: 'from-blue-400 to-blue-500', over: 'border-blue-400 dark:border-blue-500 shadow-blue-200 dark:shadow-blue-900 backdrop-blur-sm bg-blue-50 dark:bg-blue-900/20 shadow-inner', dropBorder: 'border-blue-300 dark:border-blue-700', dropText: 'text-blue-500 dark:text-blue-500', header: 'bg-blue-100/30 dark:bg-blue-900/20' },
+        emerald: { bg: 'bg-emerald-50/50 dark:bg-emerald-900/10', border: 'border-emerald-200 dark:border-emerald-900/30', text: 'text-emerald-800 dark:text-emerald-400', grad: 'from-emerald-400 to-emerald-500', over: 'border-emerald-400 dark:border-emerald-500 shadow-emerald-200 dark:shadow-emerald-900 backdrop-blur-sm bg-emerald-50 dark:bg-emerald-900/20 shadow-inner', dropBorder: 'border-emerald-300 dark:border-emerald-700', dropText: 'text-emerald-500 dark:text-emerald-500', header: 'bg-emerald-100/30 dark:bg-emerald-900/20' },
+        rose: { bg: 'bg-rose-50/50 dark:bg-rose-900/10', border: 'border-rose-200 dark:border-rose-900/30', text: 'text-rose-800 dark:text-rose-400', grad: 'from-rose-400 to-rose-500', over: 'border-rose-400 dark:border-rose-500 shadow-rose-200 dark:shadow-rose-900 backdrop-blur-sm bg-rose-50 dark:bg-rose-900/20 shadow-inner', dropBorder: 'border-rose-300 dark:border-rose-700', dropText: 'text-rose-500 dark:text-rose-500', header: 'bg-rose-100/30 dark:bg-rose-900/20' }
     };
 
     const c = colorMap[color] || colorMap.slate;
@@ -106,12 +106,12 @@ function KanbanColumn({ id, title, color, applications, onDelete }: { id: string
             ref={setNodeRef}
             className={`flex flex-col rounded-3xl w-[320px] min-w-[320px] flex-shrink-0 transition-all duration-300 border-2 ${isOver ? c.over + ' scale-[1.02]' : `${c.bg} ${c.border}`}`}
         >
-            <div className={`p-4 border-b rounded-t-3xl flex items-center justify-between sticky top-0 z-10 ${c.border} bg-white/50 backdrop-blur-md`}>
+            <div className={`p-4 border-b rounded-t-3xl flex items-center justify-between sticky top-0 z-10 ${c.border} ${c.header ?? 'bg-white/50 dark:bg-slate-900/50'} backdrop-blur-md`}>
                 <div className="flex items-center gap-2.5">
-                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${c.grad} shadow-sm ring-2 ring-white`}></div>
+                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${c.grad} shadow-sm ring-2 ring-white dark:ring-slate-900`}></div>
                     <h2 className={`font-bold text-sm ${c.text}`}>{title}</h2>
                 </div>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg bg-white shadow-sm border ${c.border} ${c.text}`}>{applications.length}</span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 shadow-sm border ${c.border} ${c.text}`}>{applications.length}</span>
             </div>
 
             <div className={`p-3 flex-1 overflow-y-auto space-y-3 min-h-[150px] rounded-b-3xl ${isOver ? 'bg-transparent' : 'bg-transparent'}`}>
@@ -121,7 +121,7 @@ function KanbanColumn({ id, title, color, applications, onDelete }: { id: string
                     ))}
                 </SortableContext>
                 {applications.length === 0 && (
-                    <div className={`h-full flex items-center justify-center p-8 border-2 border-dashed rounded-xl text-sm font-medium text-center transition-colors ${isOver ? `${c.dropBorder} ${c.dropText} bg-white/50` : 'border-slate-200/50 text-slate-400'}`}>
+                    <div className={`h-full flex items-center justify-center p-8 border-2 border-dashed rounded-xl text-sm font-medium text-center transition-colors ${isOver ? `${c.dropBorder} ${c.dropText} bg-white/50 dark:bg-white/5` : 'border-slate-200/50 dark:border-slate-800/50 text-slate-400 dark:text-slate-600'}`}>
                         Drop jobs here
                     </div>
                 )}
@@ -217,7 +217,8 @@ export default function TrackerPage() {
                 fetchApps();
                 setShowAddModal(false);
             } else {
-                toast.error('Failed to add job to tracker.');
+                const data = await res.json();
+                toast.error(data.detail || 'Failed to add job to tracker.');
             }
         } catch { toast.error('Network error.'); }
         setIsAddingJob(false);
@@ -339,11 +340,11 @@ export default function TrackerPage() {
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
                             <Briefcase className="w-6 h-6 text-primary-500" />
                             Application Tracker
                         </h1>
-                        <p className="text-sm text-slate-500 mt-1">Manage your job search pipeline via drag-and-drop.</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage your job search pipeline via drag-and-drop.</p>
                     </div>
                 </div>
 
@@ -398,18 +399,18 @@ export default function TrackerPage() {
                             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
 
                         <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
-                            <div className="p-5 border-b flex items-center justify-between">
-                                <h2 className="text-xl font-bold text-slate-900">Add to Tracker</h2>
-                                <button onClick={() => setShowAddModal(false)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full">
+                            className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+                            <div className="p-5 border-b dark:border-slate-800 flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Add to Tracker</h2>
+                                <button onClick={() => setShowAddModal(false)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <div className="p-5 border-b bg-slate-50/50">
+                            <div className="p-5 border-b dark:border-slate-800 bg-slate-50/50 dark:bg-white/5">
                                 <div className="relative">
-                                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
                                     <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
                                         placeholder="Search fetched jobs by role or company..." />
                                 </div>
                             </div>
@@ -417,10 +418,10 @@ export default function TrackerPage() {
                                 {availableJobs
                                     .filter(j => j.role.toLowerCase().includes(jobSearch.toLowerCase()) || j.company.toLowerCase().includes(jobSearch.toLowerCase()))
                                     .slice(0, 50).map(job => (
-                                        <div key={job.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-300 transition-colors flex items-center justify-between group">
+                                        <div key={job.id} className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-colors flex items-center justify-between group">
                                             <div className="min-w-0 pr-4">
-                                                <h3 className="font-semibold text-slate-900 truncate">{job.role}</h3>
-                                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                                <h3 className="font-semibold text-slate-900 dark:text-white truncate">{job.role}</h3>
+                                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
                                                     <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{job.company}</span>
                                                     <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.location || 'Remote'}</span>
                                                 </div>
@@ -432,7 +433,7 @@ export default function TrackerPage() {
                                         </div>
                                     ))}
                                 {availableJobs.length === 0 && (
-                                    <div className="text-center p-8 text-slate-500 text-sm">
+                                    <div className="text-center p-8 text-slate-500 dark:text-slate-400 text-sm">
                                         No un-tracked jobs available. Go to Pipeline to fetch more.
                                     </div>
                                 )}

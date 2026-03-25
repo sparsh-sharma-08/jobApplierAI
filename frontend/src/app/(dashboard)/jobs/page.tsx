@@ -28,12 +28,12 @@ interface Job {
 }
 
 const sourceColors: Record<string, string> = {
-    remotive: 'bg-green-100 text-green-700',
-    arbeitnow: 'bg-teal-100 text-teal-700',
-    jobicy: 'bg-purple-100 text-purple-700',
-    himalayas: 'bg-sky-100 text-sky-700',
-    adzuna: 'bg-orange-100 text-orange-700',
-    linkedin: 'bg-blue-100 text-blue-700',
+    remotive: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+    arbeitnow: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400',
+    jobicy: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+    himalayas: 'bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400',
+    adzuna: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
+    linkedin: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
 };
 
 function getScoreColor(score: number) {
@@ -238,8 +238,8 @@ export default function JobsPage() {
         
         setConfirmModal({
             isOpen: true,
-            title: action === 'delete' ? 'Delete Selected Jobs' : 'Move to Tracker',
-            message: `Are you sure you want to ${action === 'delete' ? 'permanently delete' : 'mark as applied'} these ${selectedJobs.size} selected jobs?`,
+            title: action === 'delete' ? 'Delete Selected Jobs' : 'Track Selected Jobs',
+            message: `Are you sure you want to ${action === 'delete' ? 'permanently delete' : 'add to tracker'} these ${selectedJobs.size} selected jobs?`,
             type: action === 'delete' ? 'danger' : 'info',
             onConfirm: async () => {
                 try {
@@ -315,14 +315,16 @@ export default function JobsPage() {
             if (createRes.ok) {
                 const appData = await createRes.json();
                 appId = appData.id;
+            } else if (createRes.status === 400) {
+                const errorData = await createRes.json();
+                if (errorData.detail?.includes("already in your tracker")) {
+                    toast.info("Job is already being tracked! 🚀");
+                    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j));
+                    return;
+                }
+                throw new Error(errorData.detail || 'Failed to create application');
             } else {
-                // If creation fails (maybe already exists), we need to fetch all applications to find the ID
-                // For simplicity, we assume creation usually works for a new pipeline flow.
-                // In a robust app we might GET /applications?job_id=jobId
-                const appsRes = await fetch(`${API}/applications`, { headers: { Authorization: `Bearer ${token}` } });
-                const apps = await appsRes.json();
-                const existingApp = apps.find((a: any) => a.job_id === jobId);
-                if (existingApp) appId = existingApp.id;
+                throw new Error('Failed to create application');
             }
 
             if (appId) {
@@ -335,7 +337,7 @@ export default function JobsPage() {
 
                 // Update local UI
                 setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j));
-                toast.success('Successfully marked as applied! 🚀');
+                toast.success('Successfully added to tracker! 🚀');
             }
         } catch (e) {
             console.error('Failed to mark as applied', e);
@@ -514,8 +516,8 @@ export default function JobsPage() {
             <div className="space-y-4">
                 <div className="flex items-center justify-between mb-6">
                     <div>
-                        <div className="h-8 w-48 bg-slate-200 rounded animate-pulse mb-2"></div>
-                        <div className="h-4 w-64 bg-slate-100 rounded animate-pulse"></div>
+                        <div className="h-8 w-48 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mb-2"></div>
+                        <div className="h-4 w-64 bg-slate-100 dark:bg-slate-800/50 rounded animate-pulse"></div>
                     </div>
                 </div>
                 {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
@@ -536,9 +538,9 @@ export default function JobsPage() {
                     type={confirmModal.type}
                     confirmLabel={confirmModal.type === 'danger' ? 'Delete' : 'Confirm'}
                 />
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900">Jobs Pipeline</h1>
-                    <p className="mt-1 text-slate-500 text-sm font-medium">
+                <div className="sm:max-w-md">
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Jobs Pipeline</h1>
+                    <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm font-medium">
                         {filteredAndSorted.length} jobs found · AI-scored and ranked by match quality
                     </p>
                 </div>
@@ -555,9 +557,9 @@ export default function JobsPage() {
                                 value={pastingUrl}
                                 onChange={e => setPastingUrl(e.target.value)}
                                 placeholder="Paste job URL..."
-                                className="w-48 pl-9 pr-3 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none transition-all focus:w-64"
+                                className="w-48 pl-9 pr-3 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none transition-all focus:w-64"
                             />
-                            <Link className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                            <Link className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
                         </div>
                         <button onClick={handleParseUrl} disabled={isPasting || !pastingUrl.trim()}
                             className="btn-primary px-4 py-2.5 text-sm flex items-center gap-2 disabled:opacity-70 hover:scale-[1.02] shadow-sm whitespace-nowrap">
@@ -579,20 +581,20 @@ export default function JobsPage() {
             {/* Filters */}
             <div className="flex flex-wrap gap-3 items-center">
                 <div className="relative flex-1 min-w-[200px] max-w-md">
-                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
                     <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                        className="w-full pl-10 pr-4 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
                         placeholder="Search roles, companies..." />
                 </div>
                 <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
-                    className="px-4 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                    className="px-4 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none appearance-none cursor-pointer">
                     <option value="all">All Sources</option>
                     {jobSources.map(s =>
                         <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                     )}
                 </select>
                 <select value={sortBy} onChange={e => setSortBy(e.target.value as 'score' | 'date')}
-                    className="px-4 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                    className="px-4 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none appearance-none cursor-pointer">
                     <option value="score">Highest Score</option>
                     <option value="date">Most Recent</option>
                 </select>
@@ -610,7 +612,7 @@ export default function JobsPage() {
             ) : (
                 <div className="space-y-4">
                     {paginatedJobs.length > 0 && (
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-slate-200 px-4 py-3 rounded-xl mb-4 text-sm font-medium text-slate-700 shadow-sm gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl mb-4 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm gap-3">
                             <label className="flex items-center gap-3 cursor-pointer">
                                 <input 
                                     type="checkbox" 
@@ -640,14 +642,14 @@ export default function JobsPage() {
                                         className="flex gap-2 items-center flex-wrap"
                                     >
                                         <div className="flex items-center gap-2 mr-2">
-                                            <span className="text-primary-700 font-bold px-2 py-0.5 bg-primary-50 rounded-lg border border-primary-100">{selectedJobs.size}</span>
-                                            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Selected</span>
+                                            <span className="text-primary-700 dark:text-primary-400 font-bold px-2 py-0.5 bg-primary-50 dark:bg-primary-900/40 rounded-lg border border-primary-100 dark:border-primary-900/50">{selectedJobs.size}</span>
+                                            <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">Selected</span>
                                         </div>
 
-                                        <button onClick={() => handleBulkAction('mark_applied')} className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50 whitespace-nowrap rounded-lg shadow-sm">
+                                        <button onClick={() => handleBulkAction('mark_applied')} className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 whitespace-nowrap rounded-lg shadow-sm">
                                             <CheckCheck className="w-4 h-4" /> Move to Tracker
                                         </button>
-                                        <button onClick={() => handleBulkAction('delete')} className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50 whitespace-nowrap rounded-lg shadow-sm">
+                                        <button onClick={() => handleBulkAction('delete')} className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5 border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 whitespace-nowrap rounded-lg shadow-sm">
                                             <Trash2 className="w-4 h-4" /> Delete Selection
                                         </button>
                                         <button 
@@ -714,8 +716,8 @@ export default function JobsPage() {
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
-                                                <h3 className="font-bold text-slate-900 text-lg leading-tight">{job.role}</h3>
-                                                <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                                                <h3 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">{job.role}</h3>
+                                                <div className="flex items-center gap-3 mt-1 text-sm text-slate-500 dark:text-slate-400">
                                                     <span className="flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />{job.company}</span>
                                                     {job.location && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{job.location}</span>}
                                                     {job.salary && <span className="flex items-center gap-1"><span className="text-xs font-semibold">{currencySymbol}</span>{job.salary}</span>}
@@ -732,12 +734,12 @@ export default function JobsPage() {
                                         {matchedSkills.length > 0 && (
                                             <div className="flex flex-wrap gap-1.5 mt-3">
                                                 {matchedSkills.slice(0, 6).map((skill, i) => (
-                                                    <span key={i} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100">
+                                                    <span key={i} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-md border border-emerald-100 dark:border-emerald-900/30">
                                                         <CheckCircle2 className="w-3 h-3" />{skill}
                                                     </span>
                                                 ))}
                                                 {matchedSkills.length > 6 && (
-                                                    <span className="text-xs text-slate-400 px-2 py-0.5">+{matchedSkills.length - 6} more</span>
+                                                    <span className="text-xs text-slate-400 dark:text-slate-500 px-2 py-0.5">+{matchedSkills.length - 6} more</span>
                                                 )}
                                             </div>
                                         )}
@@ -748,24 +750,24 @@ export default function JobsPage() {
                                                 {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                             </span>
                                             <div className="flex-1" />
-                                            {job.status === 'applied' ? (
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-100">
-                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Applied
+                                            {job.status === 'applied' || job.status === 'interviewing' || job.status === 'offered' ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border border-emerald-100 dark:border-emerald-900/30">
+                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Tracked
                                                 </span>
                                             ) : (
                                                 <button onClick={(e) => { e.stopPropagation(); handleMarkApplied(job.id); }}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 text-xs font-semibold transition-colors border border-primary-100">
-                                                    Mark as Applied
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 text-xs font-semibold transition-colors border border-primary-100 dark:border-primary-900/30">
+                                                    Move to Tracker
                                                 </button>
                                             )}
 
                                             <a href={`/jobs/${job.id}`} onClick={(e) => e.stopPropagation()}
-                                                className="text-xs font-medium text-slate-500 hover:text-slate-700 flex items-center gap-1 border border-slate-200 px-3 py-1.5 rounded-lg bg-white transition-colors">
+                                                className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 transition-colors">
                                                 <Eye className="w-3.5 h-3.5" /> Full Details
                                             </a>
                                             <a href={job.apply_link} target="_blank" rel="noopener noreferrer"
                                                 onClick={(e) => e.stopPropagation()}
-                                                className="text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
+                                                className="text-xs font-medium text-white bg-slate-900 dark:bg-primary-600 hover:bg-slate-800 dark:hover:bg-primary-500 flex items-center gap-1 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
                                                 <ExternalLink className="w-3.5 h-3.5" />Apply
                                             </a>
                                         </div>
@@ -807,7 +809,7 @@ export default function JobsPage() {
                                             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Resume & Cover Letter</h4>
 
                                             {resumeError && generatingResumeFor === null && (
-                                                <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100">
+                                                <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-100 dark:border-red-900/30">
                                                     ⚠️ {resumeError}
                                                 </div>
                                             )}
@@ -838,7 +840,7 @@ export default function JobsPage() {
                                                     {/* PDF Preview */}
                                                     {viewingPdf === job.id && (
                                                         <iframe src={resumePath.startsWith('/resumes/') ? `${API}${resumePath}` : `${API}/download/${encodeURIComponent(resumePath)}`}
-                                                            className="w-full h-[500px] rounded-xl border border-slate-200" />
+                                                            className="w-full h-[500px] rounded-xl border border-slate-200 dark:border-slate-700" />
                                                     )}
 
                                                     {/* Cover Letter */}
@@ -878,7 +880,7 @@ export default function JobsPage() {
                                                                         <textarea
                                                                             value={editCLText}
                                                                             onChange={e => setEditCLText(e.target.value)}
-                                                                            className="w-full h-72 p-4 bg-white border border-primary-200 rounded-xl text-sm text-slate-700 leading-relaxed resize-y focus:ring-2 focus:ring-primary-400 focus:border-transparent outline-none font-mono"
+                                                                            className="w-full h-72 p-4 bg-white dark:bg-slate-900 border border-primary-200 dark:border-primary-900/50 rounded-xl text-sm text-slate-700 dark:text-slate-300 leading-relaxed resize-y focus:ring-2 focus:ring-primary-400 focus:border-transparent outline-none font-mono"
                                                                         />
                                                                         <div className="flex gap-2">
                                                                             <button onClick={() => handleSaveCoverLetter(job.id)}
@@ -894,7 +896,7 @@ export default function JobsPage() {
                                                                         </div>
                                                                     </div>
                                                                 ) : (
-                                                                    <div className="bg-white/80 p-4 rounded-xl border border-slate-200 text-sm text-slate-700 whitespace-pre-line leading-relaxed max-h-80 overflow-y-auto">
+                                                                    <div className="bg-white/80 dark:bg-slate-900/80 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed max-h-80 overflow-y-auto">
                                                                         {coverLetter}
                                                                     </div>
                                                                 )
@@ -924,7 +926,7 @@ export default function JobsPage() {
                                                         }
                                                     }}
                                                     disabled={generatingInterviewFor === job.id || !resumePath}
-                                                    className="btn-secondary px-3 py-2 text-xs flex items-center gap-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                                    className="btn-secondary px-3 py-2 text-xs flex items-center gap-2 border-indigo-200 dark:border-indigo-900/50 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 disabled:opacity-50"
                                                 >
                                                     {generatingInterviewFor === job.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
                                                     {jobInterviews[job.id] ? (viewingInterview === job.id ? 'Hide Interview Prep' : 'View Interview Prep') : 'Generate Interview Prep'}
@@ -940,7 +942,7 @@ export default function JobsPage() {
                                                         }
                                                     }}
                                                     disabled={generatingColdEmailFor === job.id || !resumePath}
-                                                    className="btn-secondary px-3 py-2 text-xs flex items-center gap-2 border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-50"
+                                                    className="btn-secondary px-3 py-2 text-xs flex items-center gap-2 border-teal-200 dark:border-teal-900/50 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 hover:bg-teal-100 dark:hover:bg-teal-900/30 disabled:opacity-50"
                                                 >
                                                     {generatingColdEmailFor === job.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
                                                     {jobColdEmails[job.id] ? (viewingColdEmail === job.id ? 'Hide Cold Email' : 'View Cold Email') : 'Generate Cold Email'}
@@ -958,15 +960,15 @@ export default function JobsPage() {
 
                                             {/* Interview UI */}
                                             {viewingInterview === job.id && jobInterviews[job.id] && (
-                                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mt-3 animate-in fade-in slide-in-from-top-2">
-                                                    <h5 className="font-semibold text-indigo-900 text-sm mb-3 flex items-center gap-2">
+                                                <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30 mt-3 animate-in fade-in slide-in-from-top-2">
+                                                    <h5 className="font-semibold text-indigo-900 dark:text-indigo-300 text-sm mb-3 flex items-center gap-2">
                                                         <MessageSquare className="w-4 h-4 text-indigo-500" /> Mock Interview Questions
                                                     </h5>
                                                     <div className="space-y-4">
                                                         {jobInterviews[job.id].map((q: any, i: number) => (
-                                                            <div key={i} className="bg-white p-3 rounded-lg border border-indigo-100/50 shadow-sm">
-                                                                <p className="font-semibold text-slate-800 text-sm mb-1.5"><span className="text-indigo-400 mr-1">Q{i + 1}.</span>{q.question}</p>
-                                                                <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                                                            <div key={i} className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-indigo-100/50 dark:border-indigo-900/20 shadow-sm">
+                                                                <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm mb-1.5"><span className="text-indigo-400 mr-1">Q{i + 1}.</span>{q.question}</p>
+                                                                <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-800">
                                                                     <span className="font-semibold text-slate-500 mr-1">Strategy:</span>{q.strategy}
                                                                 </p>
                                                             </div>
@@ -977,21 +979,21 @@ export default function JobsPage() {
 
                                             {/* Cold Email UI */}
                                             {viewingColdEmail === job.id && jobColdEmails[job.id] && (
-                                                <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-100 mt-3 animate-in fade-in slide-in-from-top-2">
+                                                <div className="bg-teal-50/50 dark:bg-teal-900/10 p-4 rounded-xl border border-teal-100 dark:border-teal-900/30 mt-3 animate-in fade-in slide-in-from-top-2">
                                                     <div className="flex items-center justify-between mb-3">
-                                                        <h5 className="font-semibold text-teal-900 text-sm flex items-center gap-2">
+                                                        <h5 className="font-semibold text-teal-900 dark:text-teal-300 text-sm flex items-center gap-2">
                                                             <Mail className="w-4 h-4 text-teal-500" /> Outreach Email
                                                         </h5>
                                                         <button onClick={() => handleCopyColdEmail(job.id)}
-                                                            className="text-xs font-semibold px-2.5 py-1 rounded bg-white border border-teal-200 text-teal-700 hover:bg-teal-50 flex items-center gap-1 transition-colors">
+                                                            className="text-xs font-semibold px-2.5 py-1 rounded bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-900/50 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/20 flex items-center gap-1 transition-colors">
                                                             {copiedColdEmail === job.id
                                                                 ? <><CheckCheck className="w-3 h-3 text-teal-600" /> Copied!</>
                                                                 : <><Copy className="w-3 h-3" /> Copy</>
                                                             }
                                                         </button>
                                                     </div>
-                                                    <div className="bg-white p-3.5 rounded-lg border border-teal-100/50 shadow-sm">
-                                                        <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{jobColdEmails[job.id]}</p>
+                                                    <div className="bg-white dark:bg-slate-800 p-3.5 rounded-lg border border-teal-100/50 dark:border-teal-900/20 shadow-sm">
+                                                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">{jobColdEmails[job.id]}</p>
                                                     </div>
                                                 </div>
                                             )}
@@ -1006,11 +1008,11 @@ export default function JobsPage() {
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-6 border-t border-slate-200 mt-6 pb-8">
-                    <p className="text-sm text-slate-500 font-medium">
-                        Showing <span className="text-slate-900 font-bold">{(currentPage - 1) * jobsPerPage + 1}</span> to{' '}
-                        <span className="text-slate-900 font-bold">{Math.min(currentPage * jobsPerPage, filteredAndSorted.length)}</span> of{' '}
-                        <span className="text-slate-900 font-bold">{filteredAndSorted.length}</span> results
+                <div className="flex items-center justify-between pt-6 border-t border-slate-200 dark:border-slate-800 mt-6 pb-8">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                        Showing <span className="text-slate-900 dark:text-white font-bold">{(currentPage - 1) * jobsPerPage + 1}</span> to{' '}
+                        <span className="text-slate-900 dark:text-white font-bold">{Math.min(currentPage * jobsPerPage, filteredAndSorted.length)}</span> of{' '}
+                        <span className="text-slate-900 dark:text-white font-bold">{filteredAndSorted.length}</span> results
                     </p>
                     <div className="flex gap-2">
                         <button
@@ -1019,7 +1021,7 @@ export default function JobsPage() {
                                 setCurrentPage(p => Math.max(1, p - 1));
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
-                            className="px-4 py-2 border border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed"
+                            className="px-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:cursor-not-allowed"
                         >
                             Previous
                         </button>
@@ -1029,7 +1031,7 @@ export default function JobsPage() {
                                 setCurrentPage(p => Math.min(totalPages, p + 1));
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
-                            className="px-4 py-2 border border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors disabled:cursor-not-allowed"
+                            className="px-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:cursor-not-allowed"
                         >
                             Next
                         </button>

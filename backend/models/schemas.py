@@ -71,6 +71,7 @@ class CandidateProfileCreate(BaseModel):
     min_salary: Optional[int] = None
     target_companies: Optional[List[str]] = []
     master_resume: Optional[Dict[str, Any]] = None
+    weekly_digest: bool = True
 
 class CandidateProfileOut(CandidateProfileCreate):
     id: int
@@ -93,6 +94,7 @@ class JobOut(BaseModel):
     posted_date: Optional[datetime] = None
     fetched_date: Optional[datetime] = None
     score: Optional["JobScoreOut"] = None
+    status: Optional[str] = "saved"
     class Config:
         from_attributes = True
 
