@@ -147,7 +147,7 @@ export default function JobDetailsPage() {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] text-center">
                 <Briefcase className="w-16 h-16 text-slate-300 mb-4" />
-                <h2 className="text-xl font-bold text-slate-800">Job Not Found</h2>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Job Not Found</h2>
                 <p className="text-slate-500 mt-2 max-w-md">{error}</p>
                 <button onClick={() => router.push('/jobs')} className="mt-6 btn-primary px-6 py-2">
                     Back to Jobs
@@ -293,7 +293,7 @@ export default function JobDetailsPage() {
         >
             <button
                 onClick={() => router.push('/jobs')}
-                className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors"
+                className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
                 <ArrowLeft className="w-4 h-4" /> Back to Pipeline
             </button>
@@ -331,17 +331,17 @@ export default function JobDetailsPage() {
                     </div>
                 </div>
 
-                <div className="bg-white px-8 py-5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                <div className="bg-white dark:bg-slate-900 px-8 py-5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex flex-wrap items-center gap-6">
                         {job.location && (
-                            <div className="flex items-center gap-2 text-slate-600 font-medium">
-                                <div className="p-2 bg-slate-50 rounded-lg"><MapPin className="w-5 h-5 text-indigo-500" /></div>
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg"><MapPin className="w-5 h-5 text-indigo-500" /></div>
                                 {job.location}
                             </div>
                         )}
                         {job.salary && (
-                            <div className="flex items-center gap-2 text-slate-600 font-medium">
-                                <div className="p-2 bg-slate-50 rounded-lg"><DollarSign className="w-5 h-5 text-emerald-500" /></div>
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium">
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg"><DollarSign className="w-5 h-5 text-emerald-500" /></div>
                                 {currencySymbol}{job.salary}
                             </div>
                         )}
@@ -367,11 +367,11 @@ export default function JobDetailsPage() {
                 {/* Left Column: Job Description */}
                 <div className="md:col-span-2 space-y-8">
                     <div className="glass-card p-8">
-                        <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                             <FileText className="w-5 h-5 text-primary-500" /> Full Description
                         </h3>
                         <div
-                            className="prose prose-slate max-w-none text-slate-600 leading-relaxed [&>h1]:text-2xl [&>h1]:font-bold [&>h2]:text-xl [&>h2]:font-bold [&>h3]:text-lg [&>ul]:list-disc [&>ul]:ml-5 [&>li]:mb-2 [&>p]:mb-4"
+                            className="prose prose-slate dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 leading-relaxed [&>h1]:text-2xl [&>h1]:font-bold [&>h2]:text-xl [&>h2]:font-bold [&>h3]:text-lg [&>ul]:list-disc [&>ul]:ml-5 [&>li]:mb-2 [&>p]:mb-4"
                             dangerouslySetInnerHTML={{ __html: cleanHtmlText(job.description || '<p>No description provided.</p>') }}
                         />
                     </div>
@@ -380,11 +380,11 @@ export default function JobDetailsPage() {
                 {/* Right Column: Skills & Insights */}
                 <div className="space-y-6">
                     <div className="glass-card p-6">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Matched Skills</h3>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Matched Skills</h3>
                         {matchedSkills.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                                 {matchedSkills.map((skill: string, i: number) => (
-                                    <span key={i} className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100">
+                                    <span key={i} className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
                                         <CheckCircle2 className="w-4 h-4" />{skill}
                                     </span>
                                 ))}
@@ -395,13 +395,13 @@ export default function JobDetailsPage() {
                     </div>
 
                     <div className="glass-card p-6">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
                             Missing Keywords
                         </h3>
                         {missingSkills.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                                 {missingSkills.map((skill: string, i: number) => (
-                                    <span key={i} className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 bg-rose-50 text-rose-700 rounded-lg border border-rose-100">
+                                    <span key={i} className="inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 rounded-lg border border-rose-100 dark:border-rose-900/30">
                                         <XCircle className="w-4 h-4" />{skill}
                                     </span>
                                 ))}
@@ -412,7 +412,7 @@ export default function JobDetailsPage() {
                     </div>
 
                     <div className="md:col-span-3 space-y-8 mt-4">
-                        <h2 className="text-2xl font-bold text-slate-900 border-b pb-4">AI Career Tools</h2>
+                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white border-b dark:border-slate-800 pb-4">AI Career Tools</h2>
 
                         {/* Resume & Cover Letter */}
                         <div className="glass-card p-6">
@@ -431,7 +431,7 @@ export default function JobDetailsPage() {
 
                             {resumeUrl && (
                                 <div className="space-y-6">
-                                    <div className="flex items-center gap-4 bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl border border-emerald-100">
+                                    <div className="flex items-center gap-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-4 py-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
                                         <CheckCircle2 className="w-5 h-5" />
                                         <span className="font-semibold">Tailored Resume Ready</span>
                                         <div className="ml-auto flex gap-2">
@@ -447,9 +447,9 @@ export default function JobDetailsPage() {
                                     </div>
 
                                     {coverLetter && (
-                                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-                                                <span className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                                            <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                                            <div className="bg-slate-50 dark:bg-slate-800 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                                <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
                                                     <FileText className="w-4 h-4 text-slate-400" /> Cover Letter
                                                 </span>
                                                 <div className="flex gap-2">
@@ -464,7 +464,7 @@ export default function JobDetailsPage() {
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <button onClick={() => setEditingCL(false)} className="px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-md transition-colors">
+                                                            <button onClick={() => setEditingCL(false)} className="px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors">
                                                                 Cancel
                                                             </button>
                                                             <button onClick={handleSaveCoverLetter} disabled={savingCL} className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 rounded-md transition-colors flex items-center gap-1">
@@ -474,15 +474,15 @@ export default function JobDetailsPage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="p-4 bg-white">
+                                            <div className="p-4 bg-white dark:bg-slate-900">
                                                 {editingCL ? (
                                                     <textarea
                                                         value={editCLText}
                                                         onChange={(e) => setEditCLText(e.target.value)}
-                                                        className="w-full h-64 p-3 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-y"
+                                                        className="w-full h-64 p-3 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-y"
                                                     />
                                                 ) : (
-                                                    <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed h-64 overflow-y-auto pr-2 custom-scrollbar">
+                                                    <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed h-64 overflow-y-auto pr-2 custom-scrollbar">
                                                         {coverLetter}
                                                     </div>
                                                 )}
@@ -509,9 +509,9 @@ export default function JobDetailsPage() {
                             {generatingColdEmail && <LLMProgressBar text="Drafting personalized cold email..." />}
 
                             {coldEmail && (
-                                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-                                        <span className="font-semibold text-slate-700 text-sm flex items-center gap-2">
+                                    <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="bg-slate-50 dark:bg-slate-800 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                        <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm flex items-center gap-2">
                                             <Mail className="w-4 h-4 text-slate-400" /> Email Draft
                                         </span>
                                         <div className="flex gap-2">
@@ -526,7 +526,7 @@ export default function JobDetailsPage() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <button onClick={() => setEditingEmail(false)} className="px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-md transition-colors">
+                                                    <button onClick={() => setEditingEmail(false)} className="px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors">
                                                         Cancel
                                                     </button>
                                                     <button onClick={handleSaveColdEmail} disabled={savingEmail} className="px-3 py-1 text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 rounded-md transition-colors flex items-center gap-1">
@@ -536,15 +536,15 @@ export default function JobDetailsPage() {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="p-4 bg-white">
+                                    <div className="p-4 bg-white dark:bg-slate-900">
                                         {editingEmail ? (
                                             <textarea
                                                 value={editEmailText}
                                                 onChange={(e) => setEditEmailText(e.target.value)}
-                                                className="w-full h-48 p-3 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-y"
+                                                className="w-full h-48 p-3 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-y"
                                             />
                                         ) : (
-                                            <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                            <div className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
                                                 {coldEmail}
                                             </div>
                                         )}
@@ -572,12 +572,12 @@ export default function JobDetailsPage() {
                                 <div className="space-y-4">
                                     <div className="flex justify-end mb-2">
                                         {!editingInterview ? (
-                                            <button onClick={() => { setEditInterviewData(JSON.parse(JSON.stringify(interview))); setEditingInterview(true); }} className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5">
+                                            <button onClick={() => { setEditInterviewData(JSON.parse(JSON.stringify(interview))); setEditingInterview(true); }} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-1.5">
                                                 <Pencil className="w-3.5 h-3.5" /> Edit Questions
                                             </button>
                                         ) : (
                                             <div className="flex gap-2">
-                                                <button onClick={() => setEditingInterview(false)} className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                                <button onClick={() => setEditingInterview(false)} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">
                                                     Cancel
                                                 </button>
                                                 <button onClick={handleSaveInterview} disabled={savingInterview} className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5">
@@ -590,7 +590,7 @@ export default function JobDetailsPage() {
                                     {editingInterview ? (
                                         <div className="space-y-4">
                                             {editInterviewData.map((q: any, i: number) => (
-                                                <div key={i} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                                                <div key={i} className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
                                                     <div>
                                                         <label className="text-xs font-bold text-slate-500 uppercase">Question {i + 1}</label>
                                                         <input
@@ -601,7 +601,7 @@ export default function JobDetailsPage() {
                                                                 newData[i].question = e.target.value;
                                                                 setEditInterviewData(newData);
                                                             }}
-                                                            className="w-full mt-1 p-2 border border-slate-200 rounded-md text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                                                            className="w-full mt-1 p-2 border border-slate-200 dark:border-slate-700 rounded-md text-sm text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500"
                                                         />
                                                     </div>
                                                     <div>
@@ -613,7 +613,7 @@ export default function JobDetailsPage() {
                                                                 newData[i].strategy = e.target.value;
                                                                 setEditInterviewData(newData);
                                                             }}
-                                                            className="w-full mt-1 p-2 border border-slate-200 rounded-md text-sm text-slate-600 focus:ring-2 focus:ring-indigo-500 resize-y min-h-[80px]"
+                                                            className="w-full mt-1 p-2 border border-slate-200 dark:border-slate-700 rounded-md text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500 resize-y min-h-[80px]"
                                                         />
                                                     </div>
                                                 </div>
@@ -622,11 +622,11 @@ export default function JobDetailsPage() {
                                     ) : (
                                         <div className="space-y-4">
                                             {interview.map((q: any, i: number) => (
-                                                <div key={i} className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-indigo-100 transition-colors">
-                                                    <h4 className="font-bold text-slate-800 flex gap-2">
+                                                <div key={i} className="p-4 bg-white dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 rounded-xl shadow-sm hover:border-indigo-100 dark:hover:border-indigo-900/30 transition-colors">
+                                                    <h4 className="font-bold text-slate-800 dark:text-slate-100 flex gap-2">
                                                         <span className="text-indigo-500">Q:</span> {q.question}
                                                     </h4>
-                                                    <p className="mt-2 text-sm text-slate-600 flex gap-2">
+                                                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 flex gap-2">
                                                         <span className="text-emerald-500 font-bold">💡</span> {q.strategy}
                                                     </p>
                                                 </div>

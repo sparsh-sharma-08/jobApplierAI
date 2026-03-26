@@ -1,5 +1,6 @@
 def profile_to_dict(profile) -> dict:
     return {
+        "id": profile.id,
         "name": profile.name,
         "email": profile.email,
         "phone": profile.phone,

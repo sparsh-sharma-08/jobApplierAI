@@ -4,6 +4,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { Upload, Loader2, User, Mail, MapPin, Briefcase, Code2, Linkedin, Github, CheckCircle2, AlertCircle, FileText, Edit3, Save, ChevronDown, ChevronUp, Trash2, Plus, X, Eye } from 'lucide-react';
 import LLMProgressBar from '@/components/LLMProgressBar';
 
+import { useResumeProfiles, ResumeProfile } from '@/hooks/useResumeProfiles';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import InputModal from '@/components/InputModal';
+
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 // ─── Types ───
@@ -32,27 +36,43 @@ function normalizeResume(r: any): MasterResume {
 }
 
 export default function ProfilePage() {
+    const { 
+        profiles, 
+        loading: profilesLoading, 
+        activeProfile, 
+        activeProfileId, 
+        setActiveProfileId,
+        createProfile,
+        updateProfile,
+        deleteProfile 
+    } = useResumeProfiles();
+
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [msg, setMsg] = useState({ text: '', type: '' });
 
-    // Profile form fields
+    // Profile form fields (Global Identity)
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [location, setLocation] = useState('');
     const [linkedin, setLinkedin] = useState('');
     const [github, setGithub] = useState('');
-    const [skills, setSkills] = useState('');
-    const [roles, setRoles] = useState('');
     const [locations, setLocations] = useState('');
     const [remotePreference, setRemotePreference] = useState('any');
-    const [experienceLevel, setExperienceLevel] = useState('fresher');
+    const [minSalary, setMinSalary] = useState('');
 
-    // Master resume state
+    // Active Profile fields (Specialized Data)
+    const [profileName, setProfileName] = useState('');
+    const [roleTitle, setRoleTitle] = useState('');
+    const [profileSummary, setProfileSummary] = useState('');
+    const [profileSkills, setProfileSkills] = useState('');
+    const [experienceLevel, setExperienceLevel] = useState('mid');
+    const [preferredRoles, setPreferredRoles] = useState('');
     const [masterResume, setMasterResume] = useState<MasterResume | null>(null);
+
     const [editingResume, setEditingResume] = useState(false);
     const [savingResume, setSavingResume] = useState(false);
     const [resumeMsg, setResumeMsg] = useState({ text: '', type: '' });
@@ -60,6 +80,14 @@ export default function ProfilePage() {
         contact: true, summary: true, skills: true, experience: true, projects: true, education: true, certifications: false
     });
     const [activeTab, setActiveTab] = useState<'profile' | 'resume'>('profile');
+    
+    // ─── Modal States ───
+    const [isNewProfileModalOpen, setIsNewProfileModalOpen] = useState(false);
+    const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; profileId: number | null; profileName: string }>({
+        isOpen: false,
+        profileId: null,
+        profileName: ''
+    });
 
     const getToken = () => localStorage.getItem('token');
 
@@ -67,7 +95,7 @@ export default function ProfilePage() {
         const token = getToken();
         if (!token) return;
 
-        // Fetch profile
+        // Fetch global profile
         fetch(`${API}/profile`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => { if (res.ok) return res.json(); return null; })
             .then(data => {
@@ -79,21 +107,33 @@ export default function ProfilePage() {
                     setLocation(data.location || '');
                     setLinkedin(data.linkedin || '');
                     setGithub(data.github || '');
-                    setSkills((data.skills || []).join(', '));
-                    setRoles((data.preferred_roles || []).join(', '));
                     setLocations((data.preferred_locations || []).join(', '));
                     setRemotePreference(data.remote_preference || 'any');
-                    setExperienceLevel(data.experience_level || 'fresher');
-                    if (data.master_resume && Object.keys(data.master_resume).length > 0) {
-                        setMasterResume(normalizeResume(data.master_resume));
-                    }
+                    setMinSalary(data.min_salary?.toString() || '');
                 }
             })
             .finally(() => setLoading(false));
     }, []);
 
-    // ─── Profile Save ───
-    const handleSave = async () => {
+    // Sync state when active profile changes
+    useEffect(() => {
+        if (activeProfile) {
+            setProfileName(activeProfile.name || '');
+            setRoleTitle(activeProfile.role_title || '');
+            setProfileSummary(activeProfile.summary || '');
+            setProfileSkills((activeProfile.skills || []).join(', '));
+            setExperienceLevel(activeProfile.experience_level || 'mid');
+            setPreferredRoles((activeProfile.preferred_roles || []).join(', '));
+            if (activeProfile.master_resume && Object.keys(activeProfile.master_resume).length > 0) {
+                setMasterResume(normalizeResume(activeProfile.master_resume));
+            } else {
+                setMasterResume(null);
+            }
+        }
+    }, [activeProfile]);
+
+    // ─── Global Profile Save ───
+    const handleSaveGlobal = async () => {
         const token = getToken();
         if (!token) return;
         setSaving(true);
@@ -104,17 +144,32 @@ export default function ProfilePage() {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name, email, phone, location, linkedin, github,
-                    skills: skills.split(',').map(s => s.trim()).filter(Boolean),
-                    preferred_roles: roles.split(',').map(s => s.trim()).filter(Boolean),
                     preferred_locations: locations.split(',').map(s => s.trim()).filter(Boolean),
                     remote_preference: remotePreference,
-                    experience_level: experienceLevel,
+                    min_salary: parseInt(minSalary) || 0,
                 }),
             });
-            if (res.ok) setMsg({ text: 'Profile saved successfully!', type: 'success' });
+            if (res.ok) setMsg({ text: 'Global profile saved successfully!', type: 'success' });
             else throw new Error('Save failed');
-        } catch { setMsg({ text: 'Failed to save profile.', type: 'error' }); }
+        } catch { setMsg({ text: 'Failed to save global profile.', type: 'error' }); }
         finally { setSaving(false); }
+    };
+
+    // ─── Active Profile Save (Specialized) ───
+    const handleSaveActiveProfile = async () => {
+        if (!activeProfileId) return;
+        setSaving(true);
+        setMsg({ text: '', type: '' });
+        const success = await updateProfile(activeProfileId, {
+            name: profileName,
+            role_title: roleTitle,
+            summary: profileSummary,
+            skills: profileSkills.split(',').map(s => s.trim()).filter(Boolean),
+            experience_level: experienceLevel,
+            preferred_roles: preferredRoles.split(',').map(s => s.trim()).filter(Boolean),
+        });
+        if (success) setMsg({ text: 'Specialized profile saved!', type: 'success' });
+        setSaving(false);
     };
 
     // ─── Resume Upload ───
@@ -128,8 +183,11 @@ export default function ProfilePage() {
 
         const formData = new FormData();
         formData.append('file', file);
+        // Pass active profile ID if available
+        const url = activeProfileId ? `${API}/profile/upload-resume?profile_id=${activeProfileId}` : `${API}/profile/upload-resume`;
+
         try {
-            const res = await fetch(`${API}/profile/upload-resume`, {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData,
@@ -140,16 +198,18 @@ export default function ProfilePage() {
                     setMasterResume(normalizeResume(data.parsed_data));
                     setEditingResume(true);
                     setActiveTab('resume');
-                    // Also auto-fill profile fields
+                    // Also auto-fill profile fields if this is a new profile or empty
                     const p = data.parsed_data;
-                    if (p.name) setName(p.name);
-                    if (p.contact?.email) setEmail(p.contact.email);
-                    if (p.contact?.phone) setPhone(p.contact.phone);
-                    if (p.contact?.linkedin) setLinkedin(p.contact.linkedin);
-                    if (p.contact?.github) setGithub(p.contact.github);
-                    if (p.skills?.length) setSkills(p.skills.join(', '));
+                    if (p.name && !name) setName(p.name);
+                    if (p.contact?.email && !email) setEmail(p.contact.email);
+                    if (p.contact?.phone && !phone) setPhone(p.contact.phone);
+                    if (p.contact?.linkedin && !linkedin) setLinkedin(p.contact.linkedin);
+                    if (p.contact?.github && !github) setGithub(p.contact.github);
+                    
+                    if (p.skills?.length) setProfileSkills(p.skills.join(', '));
+                    if (p.summary) setProfileSummary(p.summary);
                 }
-                setResumeMsg({ text: '✅ Resume parsed! Please review the extracted data below and click "Approve & Save".', type: 'success' });
+                setResumeMsg({ text: '✅ Resume parsed! Please review the extracted data and click "Approve & Save".', type: 'success' });
             } else {
                 const err = await res.json().catch(() => ({}));
                 throw new Error(err.detail || 'Upload failed');
@@ -161,18 +221,19 @@ export default function ProfilePage() {
     // ─── Save Master Resume ───
     const handleSaveMasterResume = async () => {
         const token = getToken();
-        if (!token || !masterResume) return;
+        if (!token || !masterResume || !activeProfileId) return;
         setSavingResume(true);
         setResumeMsg({ text: '', type: '' });
         try {
-            const res = await fetch(`${API}/profile/master-resume`, {
+            const res = await fetch(`${API}/profile/master-resume?profile_id=${activeProfileId}`, {
                 method: 'PUT',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ master_resume: masterResume }),
             });
             if (res.ok) {
                 setEditingResume(false);
-                setResumeMsg({ text: 'Master resume approved and saved! It will be used for all future tailored resumes.', type: 'success' });
+                setResumeMsg({ text: 'Master resume approved and saved!', type: 'success' });
+                // We don't need to manually update profile state here as useResumeProfiles should handle it or we can re-fetch
             } else throw new Error();
         } catch { setResumeMsg({ text: 'Failed to save master resume.', type: 'error' }); }
         finally { setSavingResume(false); }
@@ -187,10 +248,10 @@ export default function ProfilePage() {
         setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
-    if (loading) {
+    if (loading || profilesLoading) {
         return (
             <div className="flex h-[60vh] items-center justify-center">
-                <div className="w-80"><LLMProgressBar text="Loading profile..." /></div>
+                <div className="w-80"><LLMProgressBar text="Loading profiles..." /></div>
             </div>
         );
     }
@@ -199,9 +260,35 @@ export default function ProfilePage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">My Profile</h1>
-                <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm">Manage your profile and master resume for AI-tailored applications.</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">Profile & Resumes</h1>
+                    <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm">Manage multiple career paths and professional identities.</p>
+                </div>
+                <button onClick={() => setIsNewProfileModalOpen(true)} className="btn-secondary px-4 py-2 text-sm flex items-center gap-2">
+                    <Plus className="w-4 h-4" /> New Profile
+                </button>
+            </div>
+
+            {/* Profile Switcher */}
+            <div className="flex flex-wrap gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+                {profiles.map(p => (
+                    <button key={p.id} onClick={() => setActiveProfileId(p.id)}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2
+                            ${activeProfileId === p.id 
+                                ? 'bg-white dark:bg-slate-900 shadow-md text-primary-700 dark:text-primary-400' 
+                                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
+                        {p.is_default && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {p.name}
+                        {profiles.length > 1 && !p.is_default && activeProfileId === p.id && (
+                            <Trash2 onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setDeleteModal({ isOpen: true, profileId: p.id, profileName: p.name });
+                            }} 
+                                className="w-3.5 h-3.5 ml-1 text-slate-400 hover:text-red-500 transition-colors" />
+                        )}
+                    </button>
+                ))}
             </div>
 
             {/* Tab Bar */}
@@ -209,12 +296,12 @@ export default function ProfilePage() {
                 <button onClick={() => setActiveTab('profile')}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                         ${activeTab === 'profile' ? 'bg-white dark:bg-slate-900 shadow-md text-primary-700 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-white/5'}`}>
-                    <User className="w-4 h-4" /> Profile Info
+                    <User className="w-4 h-4" /> Identity & Match Preferences
                 </button>
                 <button onClick={() => setActiveTab('resume')}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                         ${activeTab === 'resume' ? 'bg-white dark:bg-slate-900 shadow-md text-primary-700 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-white/5'}`}>
-                    <FileText className="w-4 h-4" /> Master Resume
+                    <FileText className="w-4 h-4" /> Master Resume Designer
                     {hasResume && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
                     {!hasResume && <span className="w-2 h-2 rounded-full bg-amber-400" />}
                 </button>
@@ -233,7 +320,14 @@ export default function ProfilePage() {
                     )}
 
                     <div className="glass-card p-6 space-y-5">
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Personal Information</h2>
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                <User className="w-5 h-5 text-primary-500" /> Global Identity
+                            </h2>
+                            <button onClick={handleSaveGlobal} disabled={saving} className="text-primary-600 font-medium text-sm hover:underline">
+                                {saving ? 'Saving...' : 'Save Global Info'}
+                            </button>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {[
                                 { label: 'Full Name', value: name, setter: setName, icon: User, placeholder: 'Jane Doe' },
@@ -244,58 +338,85 @@ export default function ProfilePage() {
                                 { label: 'GitHub', value: github, setter: setGithub, icon: Github, placeholder: 'github.com/...' },
                             ].map(field => (
                                 <div key={field.label}>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{field.label}</label>
+                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">{field.label}</label>
                                     <input type="text" value={field.value} onChange={e => field.setter(e.target.value)}
                                         className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
                                         placeholder={field.placeholder} />
                                 </div>
                             ))}
                         </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preferred Locations</label>
+                                <input type="text" value={locations} onChange={e => setLocations(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    placeholder="Remote, Mumbai, Bangalore..." />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Min Salary Expectation ($)</label>
+                                <input type="number" value={minSalary} onChange={e => setMinSalary(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    placeholder="80000" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="glass-card p-6 space-y-5 border-2 border-primary-500/20 shadow-lg">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Briefcase className="w-5 h-5 text-primary-500" /> Specialized Search Profile: <span className="text-primary-600">{profileName}</span>
+                            </h2>
+                            <div className="flex gap-4">
+                                {!activeProfile?.is_default && (
+                                    <button onClick={() => updateProfile(activeProfileId!, { is_default: true })} className="text-slate-500 text-sm hover:underline">
+                                        Make Default
+                                    </button>
+                                )}
+                                <button onClick={handleSaveActiveProfile} disabled={saving} className="text-primary-600 font-bold text-sm hover:underline uppercase tracking-tight">
+                                    {saving ? 'Saving...' : 'Save Profile Settings'}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Profile Display Name</label>
+                                <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Target Role Title</label>
+                                <input type="text" value={roleTitle} onChange={e => setRoleTitle(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    placeholder="e.g. Senior Frontend Engineer" />
+                            </div>
+                        </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Skills (comma separated)</label>
-                            <textarea value={skills} onChange={e => setSkills(e.target.value)} rows={2}
-                                className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                placeholder="Python, React, Machine Learning..." />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Preferred Roles (comma separated)</label>
-                            <input type="text" value={roles} onChange={e => setRoles(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                placeholder="Frontend Engineer, AI Developer..." />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Preferred Locations (comma separated)</label>
-                            <input type="text" value={locations} onChange={e => setLocations(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                placeholder="Remote, Mumbai, Bangalore..." />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Experience Level</label>
-                            <select value={experienceLevel} onChange={e => setExperienceLevel(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none">
-                                <option value="fresher">Fresher (0-1 years)</option>
-                                <option value="junior">Junior (1-3 years)</option>
-                                <option value="mid">Mid (3-5 years)</option>
-                                <option value="senior">Senior (5+ years)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Remote Preference</label>
-                            <select value={remotePreference} onChange={e => setRemotePreference(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none">
-                                <option value="any">Open to Any (Remote, Hybrid, On-site)</option>
-                                <option value="remote">Strictly Remote Only</option>
-                                <option value="hybrid">Hybrid</option>
-                                <option value="onsite">On-site Only</option>
-                            </select>
+                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Target Skills (Match Scoring)</label>
+                            <textarea value={profileSkills} onChange={e => setProfileSkills(e.target.value)} rows={2}
+                                className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                placeholder="Python, React, AWS..." />
                         </div>
 
-                        <button onClick={handleSave} disabled={saving}
-                            className="btn-primary px-6 py-2.5 text-sm flex items-center gap-2 disabled:opacity-70">
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                            {saving ? 'Saving...' : 'Save Profile'}
-                        </button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preferred Roles</label>
+                                <input type="text" value={preferredRoles} onChange={e => setPreferredRoles(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    placeholder="Frontend, React, Javascript..." />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Experience Level</label>
+                                <select value={experienceLevel} onChange={e => setExperienceLevel(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none">
+                                    <option value="fresher">Fresher (0-1 years)</option>
+                                    <option value="junior">Junior (1-3 years)</option>
+                                    <option value="mid">Mid (3-5 years)</option>
+                                    <option value="senior">Senior (5+ years)</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -575,6 +696,29 @@ export default function ProfilePage() {
                     )}
                 </div>
             )}
+
+            {/* ─── Modals ─── */}
+            <InputModal
+                isOpen={isNewProfileModalOpen}
+                onClose={() => setIsNewProfileModalOpen(false)}
+                onConfirm={(name) => createProfile(name)}
+                title="Create New Profile"
+                message="Enter a name for your new professional identity (e.g., 'Data Scientist', 'Backend Developer')."
+                placeholder="Profile Name"
+                confirmLabel="Create Profile"
+            />
+
+            <ConfirmationModal
+                isOpen={deleteModal.isOpen}
+                onClose={() => setDeleteModal({ ...deleteModal, isOpen: false })}
+                onConfirm={() => {
+                    if (deleteModal.profileId) deleteProfile(deleteModal.profileId);
+                }}
+                title="Delete Profile?"
+                message={`Are you sure you want to delete the profile "${deleteModal.profileName}"? This will remove all associated resumes and job scores.`}
+                confirmLabel="Delete Permanently"
+                type="danger"
+            />
         </div>
     );
 }

@@ -15,14 +15,15 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session, joinedload
 import fitz # PyMuPDF
 
-from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application, MockInterview, ColdEmail
+from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application, MockInterview, ColdEmail, ResumeProfile
 from models.schemas import (
     UserCreate, UserOut, Token, TokenRefreshRequest,
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
     UrlInput,
     MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate,
-    JobBulkAction
+    JobBulkAction,
+    ResumeProfileCreate, ResumeProfileUpdate, ResumeProfileOut
 )
 from core.security import (
     get_password_hash, verify_password, create_access_token, create_refresh_token,
@@ -195,10 +196,25 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
 
 @app.get("/profile", response_model=Optional[CandidateProfileOut])
 def get_profile(
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+    if not profile:
+        return None
+        
+    if profile_id:
+        res_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+        if res_profile:
+            p_dict = profile_to_dict(profile)
+            p_dict["master_resume"] = res_profile.master_resume
+            p_dict["skills"] = res_profile.skills or []
+            p_dict["experience_level"] = res_profile.experience_level or profile.experience_level
+            p_dict["preferred_roles"] = res_profile.preferred_roles or profile.preferred_roles
+            return p_dict
+            
+    return profile
 
 
 @app.post("/profile", response_model=CandidateProfileOut)
@@ -224,6 +240,7 @@ def upsert_profile(
 @app.post("/profile/upload-resume")
 async def upload_resume_pdf(
     file: UploadFile = File(...),
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -245,29 +262,141 @@ async def upload_resume_pdf(
         if not parsed_json:
             raise HTTPException(status_code=500, detail="Failed to parse resume using AI.")
 
-        # Auto-save the parsed JSON as master_resume on the profile if it exists
-        profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+        # Auto-save the parsed JSON as master_resume on the profile
+        if profile_id:
+            profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+        else:
+            profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+            if not profile:
+                profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
         if profile:
             profile.master_resume = parsed_json
             db.commit()
             db.refresh(profile)
             
-        return {"message": "Success", "parsed_data": parsed_json, "saved_to_profile": profile is not None}
+        return {"message": "Success", "parsed_data": parsed_json, "saved_to_profile": profile is not None, "profile_id": profile.id if profile else None}
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error extracting resume PDF: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────
+# RESUME PROFILE ENDPOINTS
+# ─────────────────────────────────────────
+
+@app.get("/resume-profiles", response_model=List[ResumeProfileOut])
+def list_resume_profiles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    profiles = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).all()
+    
+    # Auto-migration/Initialization:
+    # If no resume profiles exist, create one from the CandidateProfile
+    if not profiles:
+        cp = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+        if cp:
+            new_rp = ResumeProfile(
+                user_id=current_user.id,
+                name="Default Profile",
+                role_title=cp.preferred_roles[0] if cp.preferred_roles and isinstance(cp.preferred_roles, list) else "Professional",
+                summary=cp.master_resume.get("summary") if cp.master_resume and isinstance(cp.master_resume, dict) else "",
+                skills=cp.skills or [],
+                experience_level=cp.experience_level or "mid",
+                preferred_roles=cp.preferred_roles or [],
+                master_resume=cp.master_resume or {},
+                is_default=True
+            )
+            db.add(new_rp)
+            db.commit()
+            db.refresh(new_rp)
+            return [new_rp]
+            
+    return profiles
+
+@app.post("/resume-profiles", response_model=ResumeProfileOut)
+def create_resume_profile(
+    data: ResumeProfileCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # If this is the first profile, make it default
+    count = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).count()
+    if count == 0:
+        data.is_default = True
+    elif data.is_default:
+        # Unset other defaults
+        db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).update({"is_default": False})
+
+    profile = ResumeProfile(**data.model_dump(), user_id=current_user.id)
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+@app.patch("/resume-profiles/{profile_id}", response_model=ResumeProfileOut)
+def update_resume_profile(
+    profile_id: int,
+    data: ResumeProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(404, "Profile not found")
+        
+    if data.is_default:
+        db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).update({"is_default": False})
+        
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(profile, key, value)
+        
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+@app.delete("/resume-profiles/{profile_id}")
+def delete_resume_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(404, "Profile not found")
+        
+    if profile.is_default:
+        # Try to set another profile as default if available
+        another = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.id != profile_id).first()
+        if another:
+            another.is_default = True
+        else:
+            raise HTTPException(400, "Cannot delete the only profile. Create another one first.")
+        
+    db.delete(profile)
+    db.commit()
+    return {"message": "Profile deleted"}
 
 
 @app.put("/profile/master-resume")
 def update_master_resume(
     payload: dict,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+    if profile_id:
+        profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    else:
+        profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not profile:
+            profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found. Please set your basic profile first.")
         
@@ -278,7 +407,7 @@ def update_master_resume(
     profile.master_resume = master_resume
     db.commit()
     db.refresh(profile)
-    return {"message": "Master resume updated successfully"}
+    return {"message": "Master resume updated successfully", "profile_id": profile.id}
 
 @app.get("/profile/master-resume")
 def get_master_resume(
@@ -292,20 +421,7 @@ def get_master_resume(
     return {"master_resume": profile.master_resume or {}}
 
 
-@app.put("/profile/master-resume")
-def update_master_resume(
-    data: dict,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Save the user-reviewed/edited master resume JSON."""
-    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
-    if not profile:
-        raise HTTPException(404, "Profile not found. Create a profile first.")
-    profile.master_resume = data.get("master_resume", {})
-    db.commit()
-    db.refresh(profile)
-    return {"message": "Master resume saved", "master_resume": profile.master_resume}
+# Profile endpoints handle ResumeProfile CRUD now
 
 
 # ─────────────────────────────────────────
@@ -319,22 +435,82 @@ def list_jobs(
     limit: int = 50,
     offset: int = 0,
     exclude_applied: bool = False,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Determine the target profile for scoring context
+    if profile_id:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    else:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        # Fallback to the first one if no default set
+        if not active_profile:
+            active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
     query = db.query(Job).filter(Job.user_id == current_user.id)
     if source:
         query = query.filter(Job.source == source)
-    if min_score is not None:
-        query = query.join(JobScore).filter(JobScore.score >= min_score)
+    
+    if min_score is not None and active_profile:
+        query = query.join(JobScore, JobScore.job_id == Job.id).filter(
+            JobScore.score >= min_score,
+            JobScore.profile_id == active_profile.id
+        )
+        
     if exclude_applied:
         query = query.filter(~Job.applications.any())
+        
     jobs = query.order_by(Job.fetched_date.desc()).offset(offset).limit(limit).all()
+    
+    from services.scorer import score_job
+    
     for job in jobs:
+        # Resolve status
         if job.applications:
             job.status = job.applications[0].status
         else:
             job.status = "saved"
+            
+        # Resolve score for the active profile
+        if active_profile:
+            score_rec = db.query(JobScore).filter(
+                JobScore.job_id == job.id, 
+                JobScore.profile_id == active_profile.id
+            ).first()
+            
+            # On-the-fly scoring if missing for this profile
+            if not score_rec and active_profile.master_resume:
+                try:
+                    job_dict = {
+                        "description": job.description,
+                        "role": job.role,
+                        "location": job.location,
+                        "salary": job.salary,
+                        "posted_date": job.posted_date
+                    }
+                    profile_dict = {
+                        "skills": active_profile.skills or [],
+                        "experience_level": active_profile.experience_level or "mid",
+                        "preferred_roles": active_profile.preferred_roles or [],
+                        "master_resume": active_profile.master_resume or {}
+                    }
+                    result = score_job(job_dict, profile_dict)
+                    score_rec = JobScore(
+                        job_id=job.id, 
+                        profile_id=active_profile.id, 
+                        score=result["score"], 
+                        explanation=result["explanation"]
+                    )
+                    db.add(score_rec)
+                    db.commit() # Commit each to ensure it's saved even if loop breaks
+                except Exception as e:
+                    logger.error(f"Failed on-the-fly score: {e}")
+            
+            job.score = score_rec
+        else:
+            job.score = None
+            
     return jobs
 
 
@@ -365,16 +541,67 @@ def clear_unapplied_jobs(
 @app.get("/jobs/{job_id}", response_model=JobOut)
 def get_job(
     job_id: int, 
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(404, "Job not found")
+        
+    # Resolve profile
+    if profile_id:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    else:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not active_profile:
+            active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
     if job.applications:
         job.status = job.applications[0].status
     else:
         job.status = "saved"
+        
+    # Resolve score for the requested profile
+    if active_profile:
+        score_rec = db.query(JobScore).filter(
+            JobScore.job_id == job.id, 
+            JobScore.profile_id == active_profile.id
+        ).first()
+        
+        # On-the-fly scoring if missing
+        if not score_rec and active_profile.master_resume:
+            from services.scorer import score_job
+            try:
+                job_dict = {
+                    "description": job.description,
+                    "role": job.role,
+                    "location": job.location,
+                    "salary": job.salary,
+                    "posted_date": job.posted_date
+                }
+                profile_dict = {
+                    "skills": active_profile.skills or [],
+                    "experience_level": active_profile.experience_level or "mid",
+                    "preferred_roles": active_profile.preferred_roles or [],
+                    "master_resume": active_profile.master_resume or {}
+                }
+                result = score_job(job_dict, profile_dict)
+                score_rec = JobScore(
+                    job_id=job.id, 
+                    profile_id=active_profile.id, 
+                    score=result["score"], 
+                    explanation=result["explanation"]
+                )
+                db.add(score_rec)
+                db.commit()
+            except Exception as e:
+                logger.error(f"Failed on-the-fly score in get_job: {e}")
+        
+        job.score = score_rec
+    else:
+        job.score = None
+        
     return job
 
 
@@ -498,9 +725,23 @@ def parse_job_url(
     if existing_job:
         raise HTTPException(status_code=409, detail="You have already added this job to your tracker.")
 
-    # Score it!
+    # Score it against the DEFAULT ResumeProfile
     from services.scorer import score_job
-    profile_dict = profile_to_dict(profile)
+    active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+    if not active_profile:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
+    if active_profile:
+        profile_dict = {
+            "skills": active_profile.skills or [],
+            "experience_level": active_profile.experience_level or "mid",
+            "preferred_roles": active_profile.preferred_roles or [],
+            "master_resume": active_profile.master_resume or {}
+        }
+    else:
+        # Emergency fallback to CandidateProfile if No ResumeProfile exists at all
+        profile_dict = profile_to_dict(profile)
+    
     score_result = score_job(job_data, profile_dict)
     
     # Save the DB
@@ -524,6 +765,7 @@ def parse_job_url(
     # Save Score
     new_score = JobScore(
         job_id=new_job.id,
+        profile_id=active_profile.id if active_profile else None,
         score=score_result["score"],
         explanation=score_result["explanation"]
     )
@@ -584,15 +826,31 @@ def generate_resume_for_job(
     if not job:
         raise HTTPException(404, "Job not found")
 
-    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
-    if not profile:
-        raise HTTPException(400, "Please set up your profile first")
+    # Resolve profile for generation
+    active_profile = None
+    if profile_id:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    
+    if not active_profile:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not active_profile:
+            active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
 
-    master_resume = profile.master_resume or {}
-    if not master_resume.get("name") and not master_resume.get("skills"):
-        logger.warning(f"No master resume for user {current_user.id}, building from profile data")
-
-    profile_dict = profile_to_dict(profile)
+    if not active_profile:
+        # Fallback to legacy CandidateProfile
+        cp = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+        if not cp:
+            raise HTTPException(400, "Please set up your profile first")
+        master_resume = cp.master_resume or {}
+        profile_dict = profile_to_dict(cp)
+    else:
+        master_resume = active_profile.master_resume or {}
+        profile_dict = {
+            "skills": active_profile.skills or [],
+            "experience_level": active_profile.experience_level or "mid",
+            "preferred_roles": active_profile.preferred_roles or [],
+            "master_resume": active_profile.master_resume or {}
+        }
 
     # Generate tailored resume (master_resume-based, instant)
     resume_data = generate_resume(
@@ -614,8 +872,9 @@ def generate_resume_for_job(
 
     # Export to files removed to save storage. PDF is generated on-the-fly now.
 
-    # Check if resume already exists for this job
-    existing = db.query(Resume).filter(Resume.job_id == job_id).first()
+    # Check if resume already exists for this job+profile
+    pid = active_profile.id if active_profile else None
+    existing = db.query(Resume).filter(Resume.job_id == job_id, Resume.profile_id == pid).first()
     if existing:
         existing.resume_data = resume_data
         existing.cover_letter = cover_letter
@@ -627,6 +886,7 @@ def generate_resume_for_job(
     else:
         resume_record = Resume(
             job_id=job_id,
+            profile_id=pid,
             resume_data=resume_data,
             cover_letter=cover_letter
         )
@@ -734,6 +994,7 @@ def update_job_resume(
 @app.get("/applications", response_model=List[ApplicationOut])
 def list_applications(
     status: Optional[str] = None, 
+    profile_id: Optional[int] = None,
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -743,6 +1004,8 @@ def list_applications(
         query = db.query(Application).options(joinedload(Application.job)).filter(Application.user_id == current_user.id)
         if status:
             query = query.filter(Application.status == status)
+        if profile_id:
+            query = query.filter(Application.profile_id == profile_id)
         apps = query.order_by(Application.created_at.desc()).offset(offset).limit(limit).all()
         return apps
     except Exception as e:
@@ -765,7 +1028,12 @@ def create_application(
     if existing_app:
         raise HTTPException(status_code=400, detail="This job is already in your tracker.")
 
-    app_record = Application(job_id=data.job_id, notes=data.notes, user_id=current_user.id)
+    app_record = Application(
+        job_id=data.job_id, 
+        profile_id=data.profile_id,
+        notes=data.notes, 
+        user_id=current_user.id
+    )
     db.add(app_record)
     db.commit()
     db.refresh(app_record)

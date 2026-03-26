@@ -3,57 +3,58 @@
 @tailwind utilities;
 
 :root {
-    --gradient-primary: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%);
-    --gradient-secondary: linear-gradient(135deg, #14b8a6 0%, #0d9488 50%, #0f766e 100%);
-    --gradient-accent: linear-gradient(135deg, #6366f1 0%, #14b8a6 100%);
-    --gradient-bg: linear-gradient(135deg, #eef2ff 0%, #f0fdfa 50%, #e0e7ff 100%);
-    --bg-main: #f8fafc;
+    --bg-main: #ffffff;
+    --bg-section: #f8fafc; /* slate-50 */
     --text-main: #0f172a;
     --text-muted: #64748b;
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --card-bg: #ffffff;
+    --card-border: #e2e8f0; /* slate-200 */
+    --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --accent: #0f172a; /* slate-900 */
 }
 
 .dark {
-    --gradient-bg: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #020617 100%);
-    --bg-main: #0f172a; /* Slate 900 */
-    --text-main: #f1f5f9; /* Slate 100 */
-    --text-muted: #94a3b8; /* Slate 400 */
-    --glass-bg: rgba(15, 23, 42, 0.8);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --card-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+    --bg-main: #020617; /* slate-950 */
+    --bg-section: #0f172a; /* slate-900 */
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --card-bg: #0f172a;
+    --card-border: #1e293b; /* slate-800 */
+    --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+    --accent: #f1f5f9;
 }
 
 body {
-    background: var(--gradient-bg);
+    background: var(--bg-main);
     color: var(--text-main);
     min-height: 100vh;
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 @layer utilities {
-    .glass-panel {
-        background: var(--glass-bg);
-        backdrop-filter: blur(16px);
-        border: 1px solid var(--glass-border);
-        box-shadow: var(--card-shadow);
-    }
-
+    /* Clean modern card — replaces old glass-card */
     .glass-card {
-        background: var(--glass-bg);
-        backdrop-filter: blur(12px);
-        border: 1px solid var(--glass-border);
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
         box-shadow: var(--card-shadow);
-        border-radius: 1rem;
+        border-radius: 1.25rem; /* rounded-[20px] */
     }
 
+    /* Glass panel for sidebar / overlays */
+    .glass-panel {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        box-shadow: var(--card-shadow);
+    }
+
+    /* Primary CTA — dark pill */
     .btn-primary {
-        @apply bg-gradient-to-r from-primary-500 to-primary-600 text-white shadow-lg shadow-primary-500/25 hover:from-primary-600 hover:to-primary-700 hover:shadow-xl hover:shadow-primary-500/30 active:scale-[0.98] transition-all duration-200 font-semibold rounded-xl;
+        @apply bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg shadow-slate-900/10 dark:shadow-white/10 hover:bg-slate-800 dark:hover:bg-slate-100 active:scale-[0.98] transition-all duration-200 font-bold rounded-full;
     }
 
+    /* Secondary CTA — outlined pill */
     .btn-secondary {
-        @apply bg-gradient-to-r from-secondary-500 to-secondary-600 text-white shadow-lg shadow-secondary-500/25 hover:from-secondary-600 hover:to-secondary-700 active:scale-[0.98] transition-all duration-200 font-semibold rounded-xl;
+        @apply bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 font-bold rounded-full;
     }
 }
 
@@ -75,7 +76,7 @@ body {
     }
 
     50% {
-        transform: translateY(-6px);
+        transform: translateY(-4px);
     }
 }
 
@@ -95,17 +96,17 @@ body {
 
     0%,
     100% {
-        box-shadow: 0 0 5px rgba(99, 102, 241, 0.3);
+        box-shadow: 0 0 5px rgba(15, 23, 42, 0.1);
     }
 
     50% {
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+        box-shadow: 0 0 15px rgba(15, 23, 42, 0.15);
     }
 }
 
 .animate-shimmer {
     animation: shimmer 2s infinite linear;
-    background: linear-gradient(90deg, transparent 0%, rgba(99, 102, 241, 0.08) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(15, 23, 42, 0.04) 50%, transparent 100%);
     background-size: 200% 100%;
 }
 

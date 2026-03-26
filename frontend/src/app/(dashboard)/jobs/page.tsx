@@ -8,6 +8,7 @@ import LLMProgressBar from '@/components/LLMProgressBar';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
+import { useResumeProfiles } from '@/hooks/useResumeProfiles';
 import { toast } from 'sonner';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -60,6 +61,7 @@ function cleanHtmlText(text: string) {
 
 export default function JobsPage() {
     const { settings } = useSettings();
+    const { profiles, activeProfileId, setActiveProfileId, loading: profilesLoading } = useResumeProfiles();
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedJob, setExpandedJob] = useState<number | null>(null);
@@ -72,6 +74,7 @@ export default function JobsPage() {
             setSortBy(settings.defaultSort);
         }
     }, [settings.defaultSort]);
+
     const [isFetching, setIsFetching] = useState(false);
     const [pastingUrl, setPastingUrl] = useState('');
     const [isPasting, setIsPasting] = useState(false);
@@ -83,12 +86,10 @@ export default function JobsPage() {
     const [viewingCoverLetter, setViewingCoverLetter] = useState<number | null>(null);
     const [copiedCL, setCopiedCL] = useState<number | null>(null);
     const [resumeError, setResumeError] = useState<string>('');
-    // Editing states
     const [editingCoverLetter, setEditingCoverLetter] = useState<number | null>(null);
     const [editCLText, setEditCLText] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
 
-    // AI Features States
     const [generatingInterviewFor, setGeneratingInterviewFor] = useState<number | null>(null);
     const [jobInterviews, setJobInterviews] = useState<Record<number, any[]>>({});
     const [interviewError, setInterviewError] = useState('');
@@ -101,10 +102,8 @@ export default function JobsPage() {
     const [copiedColdEmail, setCopiedColdEmail] = useState<number | null>(null);
     const currencySymbol = CURRENCY_SYMBOLS[settings.currency] || '₹';
 
-    // Bulk selection state
     const [selectedJobs, setSelectedJobs] = useState<Set<number>>(new Set());
 
-    // Modal state
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
         title: string;
@@ -124,11 +123,15 @@ export default function JobsPage() {
     const fetchJobs = useCallback(async () => {
         const token = getToken();
         if (!token) return;
+        setLoading(true);
         try {
-            const res = await fetch(`${API}/jobs?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
+            const url = activeProfileId 
+                ? `${API}/jobs?limit=200&profile_id=${activeProfileId}` 
+                : `${API}/jobs?limit=200`;
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
             if (res.ok) { const data = await res.json(); setJobs(data); }
         } catch { } finally { setLoading(false); }
-    }, []);
+    }, [activeProfileId]);
 
     useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
@@ -539,7 +542,7 @@ export default function JobsPage() {
                     confirmLabel={confirmModal.type === 'danger' ? 'Delete' : 'Confirm'}
                 />
                 <div className="sm:max-w-md">
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Jobs Pipeline</h1>
+                <h1 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">Jobs Pipeline</h1>
                     <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm font-medium">
                         {filteredAndSorted.length} jobs found · AI-scored and ranked by match quality
                     </p>
@@ -557,7 +560,7 @@ export default function JobsPage() {
                                 value={pastingUrl}
                                 onChange={e => setPastingUrl(e.target.value)}
                                 placeholder="Paste job URL..."
-                                className="w-48 pl-9 pr-3 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none transition-all focus:w-64"
+                                className="w-48 pl-9 pr-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition-all focus:w-64"
                             />
                             <Link className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
                         </div>
@@ -583,18 +586,29 @@ export default function JobsPage() {
                 <div className="relative flex-1 min-w-[200px] max-w-md">
                     <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
                     <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                        className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 focus:border-transparent outline-none"
                         placeholder="Search roles, companies..." />
                 </div>
+                
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full">
+                    <Briefcase className="w-4 h-4 text-slate-400" />
+                    <select value={activeProfileId || ''} onChange={e => setActiveProfileId(parseInt(e.target.value))}
+                        className="bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                        {profiles.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}{p.is_default ? ' (Default)' : ''}</option>
+                        ))}
+                    </select>
+                </div>
+
                 <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
-                    className="px-4 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none appearance-none cursor-pointer">
+                    className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 outline-none appearance-none cursor-pointer">
                     <option value="all">All Sources</option>
                     {jobSources.map(s =>
                         <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                     )}
                 </select>
                 <select value={sortBy} onChange={e => setSortBy(e.target.value as 'score' | 'date')}
-                    className="px-4 py-2.5 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none appearance-none cursor-pointer">
+                    className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 outline-none appearance-none cursor-pointer">
                     <option value="score">Highest Score</option>
                     <option value="date">Most Recent</option>
                 </select>
@@ -630,7 +644,7 @@ export default function JobsPage() {
                                     }}
                                     className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
                                 />
-                                <span className="text-slate-600">Select All {filteredAndSorted.length === paginatedJobs.length ? '' : 'on Page'}</span>
+                                <span className="text-slate-600 dark:text-slate-300">Select All {filteredAndSorted.length === paginatedJobs.length ? '' : 'on Page'}</span>
                             </label>
                             
                             <AnimatePresence>
@@ -689,7 +703,7 @@ export default function JobsPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 key={job.id}
                                 onClick={() => setExpandedJob(isExpanded ? null : job.id)}
-                                className={`glass-card overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer ${isNewJob ? 'ring-2 ring-primary-400/50 bg-primary-50/10' : ''}`}
+                                className={`glass-card overflow-hidden hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-300 cursor-pointer ${isNewJob ? 'ring-1 ring-slate-400/40 bg-slate-50/50 dark:bg-slate-800/50' : ''}`}
                             >
                                 <div className="p-5 flex gap-4">
                                     <div className="flex-shrink-0 pt-2" onClick={(e) => e.stopPropagation()}>
@@ -707,8 +721,8 @@ export default function JobsPage() {
                                     </div>
                                     {/* Score Badge */}
                                     {settings.showScoreBadges && (
-                                        <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${getScoreColor(score)} flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                                            <span className="text-white font-bold text-lg">{score}</span>
+                                        <div className={`w-14 h-14 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center flex-shrink-0`}>
+                                            <span className="text-slate-900 dark:text-white font-black text-lg">{score}</span>
                                         </div>
                                     )}
 
@@ -724,7 +738,7 @@ export default function JobsPage() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 flex-shrink-0">
-                                                <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${sourceColors[job.source] || 'bg-slate-100 text-slate-600'}`}>
+                                                <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${sourceColors[job.source] || 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
                                                     {job.source}
                                                 </span>
                                             </div>
@@ -795,7 +809,7 @@ export default function JobsPage() {
                                         <div>
                                             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</h4>
                                             <div
-                                                className="text-sm text-slate-600 leading-relaxed max-h-48 overflow-y-auto prose prose-sm prose-slate max-w-none [&>p]:mb-2 [&>ul]:list-disc [&>ul]:ml-4 [&>ul]:mb-2 [&>li]:mb-1 [&>strong]:font-semibold"
+                                                className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-h-48 overflow-y-auto prose prose-sm prose-slate dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:list-disc [&>ul]:ml-4 [&>ul]:mb-2 [&>li]:mb-1 [&>strong]:font-semibold"
                                                 dangerouslySetInnerHTML={{
                                                     __html: job.description
                                                         ? cleanHtmlText(job.description).slice(0, 1500) + (job.description.length > 1500 ? '...' : '')

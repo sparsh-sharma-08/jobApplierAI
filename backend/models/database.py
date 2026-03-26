@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, JSON, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, JSON, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -27,6 +27,7 @@ class User(Base):
     profile = relationship("CandidateProfile", back_populates="user", uselist=False)
     jobs = relationship("Job", back_populates="user")
     applications = relationship("Application", back_populates="user")
+    resume_profiles = relationship("ResumeProfile", back_populates="user")
 
 
 class CandidateProfile(Base):
@@ -52,6 +53,24 @@ class CandidateProfile(Base):
     user = relationship("User", back_populates="profile")
 
 
+class ResumeProfile(Base):
+    __tablename__ = "resume_profiles"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(String)  # Profile name, e.g., "Frontend Developer"
+    role_title = Column(String)  # Target role title
+    summary = Column(Text)
+    skills = Column(JSON)  # List of strings
+    experience_level = Column(String)
+    preferred_roles = Column(JSON)
+    master_resume = Column(JSON)
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship("User", back_populates="resume_profiles")
+
+
 class Job(Base):
     __tablename__ = "jobs"
     id = Column(Integer, primary_key=True, index=True)
@@ -67,7 +86,7 @@ class Job(Base):
     posted_date = Column(DateTime)
     fetched_date = Column(DateTime, default=datetime.utcnow)
     raw_data = Column(JSON)
-    score = relationship("JobScore", back_populates="job", uselist=False)
+    scores = relationship("JobScore", back_populates="job")
     applications = relationship("Application", back_populates="job")
     user = relationship("User", back_populates="jobs")
 
@@ -75,17 +94,21 @@ class Job(Base):
 class JobScore(Base):
     __tablename__ = "scores"
     id = Column(Integer, primary_key=True, index=True)
-    job_id = Column(Integer, ForeignKey("jobs.id"), unique=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"))
+    profile_id = Column(Integer, ForeignKey("resume_profiles.id"), nullable=True)
     score = Column(Float)
     explanation = Column(JSON)
     scored_at = Column(DateTime, default=datetime.utcnow)
-    job = relationship("Job", back_populates="score")
+    
+    job = relationship("Job", back_populates="scores")
+    profile = relationship("ResumeProfile")
 
 
 class Resume(Base):
     __tablename__ = "resumes"
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(Integer, ForeignKey("jobs.id"))
+    profile_id = Column(Integer, ForeignKey("resume_profiles.id"), nullable=True)
     resume_data = Column(JSON)
     cover_letter = Column(Text)
     file_path_json = Column(String)
@@ -100,6 +123,7 @@ class Application(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     job_id = Column(Integer, ForeignKey("jobs.id"))
+    profile_id = Column(Integer, ForeignKey("resume_profiles.id"), nullable=True)
     resume_id = Column(Integer, ForeignKey("resumes.id"), nullable=True)
     status = Column(String, default="pending")  # pending, applied, interview, rejected, offer, no_response
     applied_date = Column(DateTime, nullable=True)

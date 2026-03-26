@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor, useSensor, useSensors, DragStartEvent, DragOverEvent, DragEndEvent, useDroppable } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import LLMProgressBar from '@/components/LLMProgressBar';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import { useResumeProfiles } from '@/hooks/useResumeProfiles';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -48,11 +49,11 @@ function SortableCard({ app, onDelete }: { app: Application, onDelete: (id: numb
             style={style}
             {...attributes}
             {...listeners}
-            className={`bg-white dark:bg-slate-900 border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-primary-500 border-primary-500 z-50 scale-105 shadow-xl rotate-2' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}`}
+            className={`bg-white dark:bg-slate-900 border p-4 rounded-xl shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${isDragging ? 'ring-2 ring-slate-400 border-slate-400 z-50 scale-105 shadow-xl rotate-2' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}`}
         >
             <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center flex-shrink-0 shadow-inner">
-                    <span className="font-bold text-slate-500 dark:text-slate-400 text-lg uppercase">{app.job.company.charAt(0)}</span>
+                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center flex-shrink-0">
+                    <span className="font-black text-slate-500 dark:text-slate-400 text-lg uppercase">{app.job.company.charAt(0)}</span>
                 </div>
                 <button
                     onPointerDown={(e) => { e.stopPropagation(); }}
@@ -92,11 +93,11 @@ function KanbanColumn({ id, title, color, applications, onDelete }: { id: string
     const { setNodeRef, isOver } = useDroppable({ id });
 
     const colorMap: Record<string, { bg: string, border: string, text: string, grad: string, over: string, dropBorder: string, dropText: string, header: string }> = {
-        slate: { bg: 'bg-slate-50 dark:bg-slate-900/40', border: 'border-slate-200 dark:border-slate-800', text: 'text-slate-700 dark:text-slate-300', grad: 'from-slate-400 to-slate-500', over: 'border-slate-400 dark:border-slate-500 shadow-slate-200 dark:shadow-slate-900 backdrop-blur-sm bg-slate-100/80 dark:bg-slate-800/80 shadow-inner', dropBorder: 'border-slate-300 dark:border-slate-700', dropText: 'text-slate-500 dark:text-slate-500', header: 'bg-white/50 dark:bg-slate-900/50' },
-        amber: { bg: 'bg-amber-50/50 dark:bg-amber-900/10', border: 'border-amber-200 dark:border-amber-900/30', text: 'text-amber-800 dark:text-amber-400', grad: 'from-amber-400 to-amber-500', over: 'border-amber-400 dark:border-amber-500 shadow-amber-200 dark:shadow-amber-900 backdrop-blur-sm bg-amber-50 dark:bg-amber-900/20 shadow-inner', dropBorder: 'border-amber-300 dark:border-amber-700', dropText: 'text-amber-500 dark:text-amber-500', header: 'bg-amber-100/30 dark:bg-amber-900/20' },
-        blue: { bg: 'bg-blue-50/50 dark:bg-blue-900/10', border: 'border-blue-200 dark:border-blue-900/30', text: 'text-blue-800 dark:text-blue-400', grad: 'from-blue-400 to-blue-500', over: 'border-blue-400 dark:border-blue-500 shadow-blue-200 dark:shadow-blue-900 backdrop-blur-sm bg-blue-50 dark:bg-blue-900/20 shadow-inner', dropBorder: 'border-blue-300 dark:border-blue-700', dropText: 'text-blue-500 dark:text-blue-500', header: 'bg-blue-100/30 dark:bg-blue-900/20' },
-        emerald: { bg: 'bg-emerald-50/50 dark:bg-emerald-900/10', border: 'border-emerald-200 dark:border-emerald-900/30', text: 'text-emerald-800 dark:text-emerald-400', grad: 'from-emerald-400 to-emerald-500', over: 'border-emerald-400 dark:border-emerald-500 shadow-emerald-200 dark:shadow-emerald-900 backdrop-blur-sm bg-emerald-50 dark:bg-emerald-900/20 shadow-inner', dropBorder: 'border-emerald-300 dark:border-emerald-700', dropText: 'text-emerald-500 dark:text-emerald-500', header: 'bg-emerald-100/30 dark:bg-emerald-900/20' },
-        rose: { bg: 'bg-rose-50/50 dark:bg-rose-900/10', border: 'border-rose-200 dark:border-rose-900/30', text: 'text-rose-800 dark:text-rose-400', grad: 'from-rose-400 to-rose-500', over: 'border-rose-400 dark:border-rose-500 shadow-rose-200 dark:shadow-rose-900 backdrop-blur-sm bg-rose-50 dark:bg-rose-900/20 shadow-inner', dropBorder: 'border-rose-300 dark:border-rose-700', dropText: 'text-rose-500 dark:text-rose-500', header: 'bg-rose-100/30 dark:bg-rose-900/20' }
+        slate: { bg: 'bg-slate-50 dark:bg-slate-900/40', border: 'border-slate-200 dark:border-slate-800', text: 'text-slate-700 dark:text-slate-300', grad: 'bg-slate-400', over: 'border-slate-400 dark:border-slate-500 shadow-slate-200 dark:shadow-slate-900 bg-slate-100/80 dark:bg-slate-800/80 shadow-inner', dropBorder: 'border-slate-300 dark:border-slate-700', dropText: 'text-slate-500 dark:text-slate-500', header: 'bg-white/80 dark:bg-slate-900/80' },
+        amber: { bg: 'bg-amber-50/50 dark:bg-amber-900/10', border: 'border-amber-200 dark:border-amber-900/30', text: 'text-amber-800 dark:text-amber-400', grad: 'bg-amber-400', over: 'border-amber-400 dark:border-amber-500 shadow-amber-200 dark:shadow-amber-900 bg-amber-50 dark:bg-amber-900/20 shadow-inner', dropBorder: 'border-amber-300 dark:border-amber-700', dropText: 'text-amber-500 dark:text-amber-500', header: 'bg-amber-100/30 dark:bg-amber-900/20' },
+        blue: { bg: 'bg-blue-50/50 dark:bg-blue-900/10', border: 'border-blue-200 dark:border-blue-900/30', text: 'text-blue-800 dark:text-blue-400', grad: 'bg-blue-400', over: 'border-blue-400 dark:border-blue-500 shadow-blue-200 dark:shadow-blue-900 bg-blue-50 dark:bg-blue-900/20 shadow-inner', dropBorder: 'border-blue-300 dark:border-blue-700', dropText: 'text-blue-500 dark:text-blue-500', header: 'bg-blue-100/30 dark:bg-blue-900/20' },
+        emerald: { bg: 'bg-emerald-50/50 dark:bg-emerald-900/10', border: 'border-emerald-200 dark:border-emerald-900/30', text: 'text-emerald-800 dark:text-emerald-400', grad: 'bg-emerald-400', over: 'border-emerald-400 dark:border-emerald-500 shadow-emerald-200 dark:shadow-emerald-900 bg-emerald-50 dark:bg-emerald-900/20 shadow-inner', dropBorder: 'border-emerald-300 dark:border-emerald-700', dropText: 'text-emerald-500 dark:text-emerald-500', header: 'bg-emerald-100/30 dark:bg-emerald-900/20' },
+        rose: { bg: 'bg-rose-50/50 dark:bg-rose-900/10', border: 'border-rose-200 dark:border-rose-900/30', text: 'text-rose-800 dark:text-rose-400', grad: 'bg-rose-400', over: 'border-rose-400 dark:border-rose-500 shadow-rose-200 dark:shadow-rose-900 bg-rose-50 dark:bg-rose-900/20 shadow-inner', dropBorder: 'border-rose-300 dark:border-rose-700', dropText: 'text-rose-500 dark:text-rose-500', header: 'bg-rose-100/30 dark:bg-rose-900/20' }
     };
 
     const c = colorMap[color] || colorMap.slate;
@@ -108,8 +109,8 @@ function KanbanColumn({ id, title, color, applications, onDelete }: { id: string
         >
             <div className={`p-4 border-b rounded-t-3xl flex items-center justify-between sticky top-0 z-10 ${c.border} ${c.header ?? 'bg-white/50 dark:bg-slate-900/50'} backdrop-blur-md`}>
                 <div className="flex items-center gap-2.5">
-                    <div className={`w-3 h-3 rounded-full bg-gradient-to-br ${c.grad} shadow-sm ring-2 ring-white dark:ring-slate-900`}></div>
-                    <h2 className={`font-bold text-sm ${c.text}`}>{title}</h2>
+                    <div className={`w-3 h-3 rounded-full ${c.grad} ring-2 ring-white dark:ring-slate-900`}></div>
+                    <h2 className={`font-black text-sm ${c.text}`}>{title}</h2>
                 </div>
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 shadow-sm border ${c.border} ${c.text}`}>{applications.length}</span>
             </div>
@@ -133,6 +134,7 @@ function KanbanColumn({ id, title, color, applications, onDelete }: { id: string
 
 // --- MAIN PAGE ---
 export default function TrackerPage() {
+    const { profiles, activeProfileId, setActiveProfileId, loading: profilesLoading } = useResumeProfiles();
     const [applications, setApplications] = useState<Application[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeId, setActiveId] = useState<number | null>(null);
@@ -210,7 +212,10 @@ export default function TrackerPage() {
             const res = await fetch(`${API}/applications`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ job_id: jobId })
+                body: JSON.stringify({ 
+                    job_id: jobId,
+                    profile_id: activeProfileId
+                })
             });
             if (res.ok) {
                 toast.success('Job added to tracker!');
@@ -229,20 +234,18 @@ export default function TrackerPage() {
         useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
     );
 
-    useEffect(() => {
-        fetchApps();
-    }, []);
-
-    const fetchApps = async () => {
+    const fetchApps = useCallback(async () => {
         setIsLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${API}/applications`, {
+            const url = activeProfileId 
+                ? `${API}/applications?profile_id=${activeProfileId}&limit=500` 
+                : `${API}/applications?limit=500`;
+            const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
-                console.log(`[Tracker] Fetched ${data.length} applications:`, data);
                 setApplications(data);
             }
         } catch (e) {
@@ -250,7 +253,11 @@ export default function TrackerPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [activeProfileId]);
+
+    useEffect(() => {
+        fetchApps();
+    }, [fetchApps]);
 
     const handleDragStart = (event: DragStartEvent) => {
         setActiveId(event.active.id as number);
@@ -340,11 +347,24 @@ export default function TrackerPage() {
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-                            <Briefcase className="w-6 h-6 text-primary-500" />
+                        <h1 className="text-2xl font-black tracking-tighter text-slate-900 dark:text-white flex items-center gap-3">
+                            <Briefcase className="w-6 h-6 text-slate-400" />
                             Application Tracker
                         </h1>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage your job search pipeline via drag-and-drop.</p>
+                        <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm font-medium">
+                            {applications.length} jobs tracked for {profiles.find(p => p.id === activeProfileId)?.name || 'Default'} profile
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full">
+                            <Briefcase className="w-4 h-4 text-slate-400" />
+                            <select value={activeProfileId || ''} onChange={e => setActiveProfileId(parseInt(e.target.value))}
+                                className="bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                                {profiles.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}{p.is_default ? ' (Default)' : ''}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -410,7 +430,7 @@ export default function TrackerPage() {
                                 <div className="relative">
                                     <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
                                     <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 outline-none"
                                         placeholder="Search fetched jobs by role or company..." />
                                 </div>
                             </div>

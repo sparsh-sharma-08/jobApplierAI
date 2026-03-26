@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Settings, Globe, SlidersHorizontal, Briefcase, Shield, RotateCcw, Check, Save, Loader2, Trash2, AlertTriangle, Eye, EyeOff, BarChart3, Download, Bell, Moon, Sun, Monitor, Mail } from 'lucide-react';
 import { useSettings, ALL_SOURCES, SOURCE_LABELS, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
+import ConfirmationModal from '@/components/ConfirmationModal';
+import { toast } from 'sonner';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
@@ -21,6 +23,20 @@ export default function SettingsPage() {
     const [showNewPw, setShowNewPw] = useState(false);
     const [clearingData, setClearingData] = useState(false);
     const [clearConfirm, setClearConfirm] = useState('');
+
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        type: 'danger' | 'warning' | 'info';
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        type: 'warning'
+    });
 
     // Job preferences (synced from profile)
     const [remotePreference, setRemotePreference] = useState('any');
@@ -129,7 +145,7 @@ export default function SettingsPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Settings</h1>
+                    <h1 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">Settings</h1>
                     <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm">Customize your CareerCopilot experience.</p>
                 </div>
                 {saved && (
@@ -140,13 +156,13 @@ export default function SettingsPage() {
             </div>
 
             {/* Tab Bar */}
-            <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+            <div className="flex gap-1 p-1.5 bg-slate-100 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
                 {tabs.map(tab => (
                     <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200
                             ${activeTab === tab.id
-                                ? 'bg-white dark:bg-slate-900 shadow-md text-primary-700 dark:text-primary-400'
-                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-white/5'
+                                ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                             }`}>
                         <tab.icon className="w-4 h-4" />
                         <span className="hidden sm:inline">{tab.label}</span>
@@ -496,7 +512,18 @@ export default function SettingsPage() {
                                 <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Reset All Settings</h3>
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400">Restore all display preferences, source selections, and toggles to their defaults.</p>
-                            <button onClick={() => { resetSettings(); showSavedToast(); }}
+                            <button onClick={() => {
+                                setConfirmModal({
+                                    isOpen: true,
+                                    title: 'Reset Settings?',
+                                    message: 'Are you sure you want to restore all display and source settings to their defaults? This cannot be undone.',
+                                    type: 'warning',
+                                    onConfirm: () => {
+                                        resetSettings();
+                                        toast.success('Settings reset to defaults');
+                                    }
+                                });
+                            }}
                                 className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
                                 Reset to Defaults
                             </button>
@@ -509,7 +536,18 @@ export default function SettingsPage() {
                                 <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Session</h3>
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400">Your session is stored locally. Sign out from the sidebar when you&apos;re done.</p>
-                            <button onClick={() => { localStorage.removeItem('token'); window.location.href = '/'; }}
+                            <button onClick={() => {
+                                setConfirmModal({
+                                    isOpen: true,
+                                    title: 'Sign Out?',
+                                    message: 'Are you sure you want to sign out of your session?',
+                                    type: 'info',
+                                    onConfirm: () => {
+                                        localStorage.removeItem('token');
+                                        window.location.href = '/';
+                                    }
+                                });
+                            }}
                                 className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-xl text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors">
                                 Sign Out
                             </button>
@@ -536,6 +574,15 @@ export default function SettingsPage() {
                     </div>
                 )}
             </div>
+            
+            <ConfirmationModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type={confirmModal.type}
+            />
         </div >
     );
 }

@@ -79,6 +79,43 @@ class CandidateProfileOut(CandidateProfileCreate):
     class Config:
         from_attributes = True
 
+# Resume Profile
+class ResumeProfileCreate(BaseModel):
+    name: str
+    role_title: Optional[str] = None
+    summary: Optional[str] = None
+    skills: Optional[List[str]] = []
+    experience_level: Optional[str] = "mid"
+    preferred_roles: Optional[List[str]] = []
+    master_resume: Optional[Dict[str, Any]] = None
+    is_default: bool = False
+
+class ResumeProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    role_title: Optional[str] = None
+    summary: Optional[str] = None
+    skills: Optional[List[str]] = None
+    experience_level: Optional[str] = None
+    preferred_roles: Optional[List[str]] = None
+    master_resume: Optional[Dict[str, Any]] = None
+    is_default: Optional[bool] = None
+
+class ResumeProfileOut(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    role_title: Optional[str] = None
+    summary: Optional[str] = None
+    skills: Optional[List[str]] = []
+    experience_level: Optional[str] = "mid"
+    preferred_roles: Optional[List[str]] = []
+    master_resume: Optional[Dict[str, Any]] = None
+    is_default: bool = False
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    class Config:
+        from_attributes = True
+
 
 # Job
 class JobOut(BaseModel):
@@ -119,6 +156,7 @@ class JobBulkAction(BaseModel):
 class ResumeOut(BaseModel):
     id: int
     job_id: int
+    profile_id: Optional[int] = None
     resume_data: Optional[Dict[str, Any]]
     cover_letter: Optional[str]
     file_path_json: Optional[str]
@@ -132,6 +170,7 @@ class ResumeOut(BaseModel):
 # Application
 class ApplicationCreate(BaseModel):
     job_id: int
+    profile_id: Optional[int] = None
     notes: Optional[str] = None
 
 class ApplicationUpdate(BaseModel):
@@ -141,6 +180,7 @@ class ApplicationUpdate(BaseModel):
 class ApplicationOut(BaseModel):
     id: int
     job_id: int
+    profile_id: Optional[int] = None
     resume_id: Optional[int]
     status: str
     applied_date: Optional[datetime]
