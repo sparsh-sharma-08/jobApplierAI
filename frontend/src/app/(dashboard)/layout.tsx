@@ -100,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                         ? 'bg-white text-slate-900 shadow-lg shadow-white/5'
                                         : 'text-slate-500 hover:text-white hover:bg-white/[0.06]'
                                     }`}>
-                                <item.icon className={`w-5 h-5 ${isActive ? 'text-slate-900' : 'text-slate-600 group-hover:text-white'}`} />
+                                <item.icon className={`w-5 h-5 ${isActive ? 'text-slate-900' : 'text-slate-500 group-hover:text-white'}`} />
                                 {item.label}
                             </Link>
                         );

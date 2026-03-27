@@ -22,7 +22,7 @@ export interface AppSettings {
     theme: 'light' | 'dark' | 'system';
 }
 
-export const ALL_SOURCES = ['remotive', 'arbeitnow', 'jobicy', 'himalayas', 'adzuna', 'linkedin', 'instahyre'];
+export const ALL_SOURCES = ['remotive', 'findremotely', 'jobicy', 'himalayas', 'adzuna', 'instahyre', 'weworkremotely'];
 
 export const DEFAULT_SETTINGS: AppSettings = {
     currency: 'INR',
@@ -46,12 +46,12 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export const SOURCE_LABELS: Record<string, string> = {
     remotive: 'Remotive',
-    arbeitnow: 'Arbeitnow',
+    findremotely: 'FindRemotely',
     jobicy: 'Jobicy',
     himalayas: 'Himalayas',
     adzuna: 'Adzuna',
-    linkedin: 'LinkedIn',
     instahyre: 'Instahyre',
+    weworkremotely: 'WeWorkRemotely',
 };
 
 export interface SettingsContextType {

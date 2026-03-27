@@ -69,7 +69,7 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
             raw_data = job_data.get("raw_data", {})
             is_remote_job = (
                 "remote" in job_loc or "anywhere" in job_loc or "worldwide" in job_loc 
-                or source in ["remotive", "jobicy", "himalayas"]
+                or source in ["remotive", "findremotely", "jobicy", "himalayas", "weworkremotely"]
                 or raw_data.get("remote") is True
             )
             

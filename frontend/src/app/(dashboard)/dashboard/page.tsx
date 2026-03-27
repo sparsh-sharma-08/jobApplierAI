@@ -50,7 +50,7 @@ export default function DashboardPage() {
             setLoading(true);
             const query = activeProfileId ? `?profile_id=${activeProfileId}` : '';
             const [jobsRes, profileRes, appsRes] = await Promise.all([
-                apiFetch(`${API}/jobs${query ? (query.includes('?') ? '&' : '?') + 'limit=500' : '?limit=500'}`),
+                apiFetch(`${API}/jobs${query ? query + '&limit=500' : '?limit=500'}`),
                 apiFetch(`${API}/profile${query}`),
                 apiFetch(`${API}/applications${query}`)
             ]);
@@ -445,8 +445,10 @@ export default function DashboardPage() {
                                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${job.source === 'remotive' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' :
                                             job.source === 'jobicy' ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400' :
                                                 job.source === 'himalayas' ? 'bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400' :
-                                                    job.source === 'arbeitnow' ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400' :
-                                                        'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                                    job.source === 'findremotely' ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400' :
+                                                        job.source === 'weworkremotely' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' :
+                                                            job.source === 'instahyre' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' :
+                                                                'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                                             }`}>{job.source}</span>
                                     </Link>
                                 ))}

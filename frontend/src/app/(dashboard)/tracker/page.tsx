@@ -122,7 +122,7 @@ function KanbanColumn({ id, title, color, applications, onDelete }: { id: string
                     ))}
                 </SortableContext>
                 {applications.length === 0 && (
-                    <div className={`h-full flex items-center justify-center p-8 border-2 border-dashed rounded-xl text-sm font-medium text-center transition-colors ${isOver ? `${c.dropBorder} ${c.dropText} bg-white/50 dark:bg-white/5` : 'border-slate-200/50 dark:border-slate-800/50 text-slate-400 dark:text-slate-600'}`}>
+                    <div className={`h-full flex items-center justify-center p-8 border-2 border-dashed rounded-xl text-sm font-medium text-center transition-colors ${isOver ? `${c.dropBorder} ${c.dropText} bg-white/50 dark:bg-white/5` : 'border-slate-200/50 dark:border-slate-700/50 text-slate-400 dark:text-slate-500'}`}>
                         Drop jobs here
                     </div>
                 )}
@@ -428,7 +428,7 @@ export default function TrackerPage() {
                             </div>
                             <div className="p-5 border-b dark:border-slate-800 bg-slate-50/50 dark:bg-white/5">
                                 <div className="relative">
-                                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-600" />
+                                    <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-500" />
                                     <input type="text" value={jobSearch} onChange={e => setJobSearch(e.target.value)}
                                         className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 outline-none"
                                         placeholder="Search fetched jobs by role or company..." />

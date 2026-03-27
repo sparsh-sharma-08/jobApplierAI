@@ -51,7 +51,8 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", 
+"http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1001,7 +1002,10 @@ def list_applications(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        query = db.query(Application).options(joinedload(Application.job)).filter(Application.user_id == current_user.id)
+        query = db.query(Application).options(joinedload(Application.job)).filter(
+            Application.user_id == current_user.id,
+            Application.job_id.isnot(None)  # Skip orphaned records with deleted jobs
+        )
         if status:
             query = query.filter(Application.status == status)
         if profile_id:

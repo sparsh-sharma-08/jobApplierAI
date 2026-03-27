@@ -179,7 +179,7 @@ class ApplicationUpdate(BaseModel):
 
 class ApplicationOut(BaseModel):
     id: int
-    job_id: int
+    job_id: Optional[int] = None
     profile_id: Optional[int] = None
     resume_id: Optional[int]
     status: str

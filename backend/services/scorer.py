@@ -221,20 +221,20 @@ def score_job(
         "missing_keywords": missing_keywords[:10],
         "location_match": location_match,
         "experience_match": experience_match,
-        "recency_score": recency_score,
+        "recency_score": float(recency_score),
         "breakdown": {
-            "semantic_score": round(semantic_score, 2),
-            "keyword_score": round(keyword_score, 2),
-            "experience_score": round(exp_score, 2),
-            "location_score": round(loc_score, 2),
-            "recency_score": round(recency_score, 2),
-            "role_bonus": role_bonus
+            "semantic_score": float(round(semantic_score, 2)),
+            "keyword_score": float(round(keyword_score, 2)),
+            "experience_score": float(round(exp_score, 2)),
+            "location_score": float(round(loc_score, 2)),
+            "recency_score": float(round(recency_score, 2)),
+            "role_bonus": int(role_bonus)
         },
         "reasoning": _generate_reasoning(matched_skills, missing_keywords, location_match, experience_match, score)
     }
 
     return {
-        "score": round(score, 2),
+        "score": float(round(score, 2)),
         "explanation": explanation
     }
 
