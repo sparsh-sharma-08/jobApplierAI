@@ -250,7 +250,11 @@ export default function JobsPage() {
                     const res = await fetch(`${API}/jobs/bulk-action`, {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action, job_ids: Array.from(selectedJobs) })
+                        body: JSON.stringify({ 
+                            action, 
+                            job_ids: Array.from(selectedJobs),
+                            profile_id: activeProfileId
+                        })
                     });
                     if (res.ok) {
                         const data = await res.json();
@@ -355,7 +359,7 @@ export default function JobsPage() {
         setGeneratingResumeFor(jobId);
         setResumeError('');
         try {
-            const res = await fetch(`${API}/resumes/generate/${jobId}`, {
+            const res = await fetch(`${API}/resumes/generate/${jobId}?profile_id=${activeProfileId}`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -404,7 +408,7 @@ export default function JobsPage() {
         setGeneratingInterviewFor(jobId);
         setInterviewError('');
         try {
-            const res = await fetch(`${API}/jobs/${jobId}/interview`, {
+            const res = await fetch(`${API}/jobs/${jobId}/interview?profile_id=${activeProfileId}`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -428,7 +432,7 @@ export default function JobsPage() {
         setGeneratingColdEmailFor(jobId);
         setColdEmailError('');
         try {
-            const res = await fetch(`${API}/jobs/${jobId}/cold-email`, {
+            const res = await fetch(`${API}/jobs/${jobId}/cold-email?profile_id=${activeProfileId}`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }
             });

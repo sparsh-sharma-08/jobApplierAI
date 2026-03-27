@@ -150,6 +150,7 @@ JobOut.model_rebuild()
 class JobBulkAction(BaseModel):
     action: str # "delete" or "mark_applied"
     job_ids: List[int]
+    profile_id: Optional[int] = None
 
 
 # Resume

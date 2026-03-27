@@ -140,6 +140,7 @@ class MockInterview(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     job_id = Column(Integer, ForeignKey("jobs.id"))
+    profile_id = Column(Integer, ForeignKey("resume_profiles.id"), nullable=True)
     questions = Column(JSON)  # List of dicts: {"question": "...", "strategy": "..."}
     generated_at = Column(DateTime, default=datetime.utcnow)
 
@@ -152,6 +153,7 @@ class ColdEmail(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     job_id = Column(Integer, ForeignKey("jobs.id"))
+    profile_id = Column(Integer, ForeignKey("resume_profiles.id"), nullable=True)
     email_body = Column(Text)
     generated_at = Column(DateTime, default=datetime.utcnow)
 

@@ -632,11 +632,19 @@ def bulk_action_jobs(
             # Check if application exists
             app_req = db.query(Application).filter(Application.job_id == job.id).first()
             if not app_req:
-                app_req = Application(job_id=job.id, user_id=current_user.id, status="applied", applied_date=datetime.utcnow())
+                app_req = Application(
+                    job_id=job.id, 
+                    user_id=current_user.id, 
+                    profile_id=action.profile_id,
+                    status="applied", 
+                    applied_date=datetime.utcnow()
+                )
                 db.add(app_req)
             else:
                 app_req.status = "applied"
                 app_req.applied_date = datetime.utcnow()
+                if action.profile_id:
+                    app_req.profile_id = action.profile_id
             count += 1
         db.commit()
         return {"message": f"Successfully marked {count} jobs as applied.", "count": count}
@@ -817,6 +825,7 @@ def score_all_jobs(
 def generate_resume_for_job(
     job_id: int, 
     request: Request,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1115,6 +1124,7 @@ def trigger_application(
 def create_mock_interview(
     job_id: int,
     request: Request,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1122,16 +1132,43 @@ def create_mock_interview(
     if not job:
         raise HTTPException(404, "Job not found")
         
-    resume = db.query(Resume).filter(Resume.job_id == job_id).order_by(Resume.id.desc()).first()
+    # Resolve profile for context
+    active_profile = None
+    if profile_id:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    
+    if not active_profile:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not active_profile:
+            active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
+    resume = db.query(Resume).filter(Resume.job_id == job_id)
+    if active_profile:
+        resume = resume.filter(Resume.profile_id == active_profile.id)
+    resume = resume.order_by(Resume.id.desc()).first()
+    
     resume_data = resume.resume_data if resume and resume.resume_data else {}
     
-    questions = generate_mock_interview(
-        job_description=job.description,
-        job_title=job.role,
-        resume_data=resume_data
-    )
+    questions = []
+    try:
+        questions = generate_mock_interview(
+            job_description=job.description,
+            job_title=job.role,
+            resume_data=resume_data
+        )
+    except Exception as e:
+        logger.error(f"Error generating mock interview: {e}")
+        questions = [
+            {"question": "Tell me about your experience related to this role.", "strategy": "Focus on the skills mentioned in your resume."},
+            {"question": "What's a challenging project you've worked on recently?", "strategy": "Describe the problem, your action, and the result."}
+        ]
     
-    mock = MockInterview(user_id=current_user.id, job_id=job_id, questions=questions)
+    mock = MockInterview(
+        user_id=current_user.id, 
+        job_id=job_id, 
+        profile_id=active_profile.id if active_profile else None,
+        questions=questions
+    )
     db.add(mock)
     db.commit()
     db.refresh(mock)
@@ -1169,6 +1206,7 @@ def update_mock_interview(
 def create_cold_email(
     job_id: int,
     request: Request,
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1176,16 +1214,40 @@ def create_cold_email(
     if not job:
         raise HTTPException(404, "Job not found")
         
-    resume = db.query(Resume).filter(Resume.job_id == job_id).order_by(Resume.id.desc()).first()
+    # Resolve profile for context
+    active_profile = None
+    if profile_id:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    
+    if not active_profile:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not active_profile:
+            active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
+    resume = db.query(Resume).filter(Resume.job_id == job_id)
+    if active_profile:
+        resume = resume.filter(Resume.profile_id == active_profile.id)
+    resume = resume.order_by(Resume.id.desc()).first()
+    
     resume_data = resume.resume_data if resume and resume.resume_data else {}
     
-    email_body = generate_cold_email(
-        job_title=job.role,
-        company=job.company,
-        resume_data=resume_data
-    )
+    email_body = ""
+    try:
+        email_body = generate_cold_email(
+            job_title=job.role,
+            company=job.company,
+            resume_data=resume_data
+        )
+    except Exception as e:
+        logger.error(f"Error generating cold email: {e}")
+        email_body = f"Hi,\n\nI'm reaching out regarding the {job.role} position at {job.company}. I have experience in {', '.join(resume_data.get('skills', [])[:3])} and would love to discuss how I can contribute to your team.\n\nBest regards,\n{resume_data.get('name', 'Candidate')}"
     
-    cold_email = ColdEmail(user_id=current_user.id, job_id=job_id, email_body=email_body)
+    cold_email = ColdEmail(
+        user_id=current_user.id, 
+        job_id=job_id, 
+        profile_id=active_profile.id if active_profile else None,
+        email_body=email_body
+    )
     db.add(cold_email)
     db.commit()
     db.refresh(cold_email)

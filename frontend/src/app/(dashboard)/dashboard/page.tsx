@@ -218,38 +218,38 @@ export default function DashboardPage() {
             {/* Hero Header */}
             <div className="relative overflow-hidden rounded-[2rem] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 md:p-10">
                 <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] -z-10"></div>
-                    <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                        <div>
-                            <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-slate-900 dark:text-white">
-                                {greeting}{userName ? `, ${userName.split(' ')[0]}` : ''} 👋
-                            </h1>
-                            <p className="mt-2 text-slate-500 dark:text-slate-400 text-base font-medium">
-                                {stats.total_jobs > 0
-                                    ? `${stats.total_jobs} jobs tracked · ${stats.high_matches} high matches · ${Math.round(stats.avg_score)}% avg score`
-                                    : 'Start by fetching jobs to build your pipeline'
-                                }
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full transition-all shadow-sm">
-                                <Briefcase className="w-4 h-4 text-slate-400" />
-                                <select value={activeProfileId || ''} onChange={e => setActiveProfileId(parseInt(e.target.value))}
-                                    className="bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
-                                    {profiles.map(p => (
-                                        <option key={p.id} value={p.id} className="text-slate-900">{p.name}{p.is_default ? ' (Default)' : ''}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <button
-                                onClick={handleFetchNewJobs}
-                                disabled={isFetchingJobs}
-                                className="btn-primary inline-flex items-center gap-2 px-6 py-3 text-sm disabled:opacity-70"
-                            >
-                                {isFetchingJobs ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                {isFetchingJobs ? 'Scanning...' : 'Fetch New Jobs'}
-                            </button>
-                        </div>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-slate-900 dark:text-white">
+                            {greeting}{userName ? `, ${userName.split(' ')[0]}` : ''} 👋
+                        </h1>
+                        <p className="mt-2 text-slate-500 dark:text-slate-400 text-base font-medium">
+                            {stats.total_jobs > 0
+                                ? `${stats.total_jobs} jobs tracked · ${stats.high_matches} high matches · ${Math.round(stats.avg_score)}% avg score`
+                                : 'Start by fetching jobs to build your pipeline'
+                            }
+                        </p>
                     </div>
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full transition-all shadow-sm">
+                            <Briefcase className="w-4 h-4 text-slate-400" />
+                            <select value={activeProfileId || ''} onChange={e => setActiveProfileId(parseInt(e.target.value))}
+                                className="bg-transparent text-sm font-bold text-slate-900 dark:text-white outline-none cursor-pointer">
+                                {profiles.map(p => (
+                                    <option key={p.id} value={p.id} className="text-slate-900">{p.name}{p.is_default ? ' (Default)' : ''}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <button
+                            onClick={handleFetchNewJobs}
+                            disabled={isFetchingJobs}
+                            className="btn-primary inline-flex items-center gap-2 px-6 py-3 text-sm disabled:opacity-70"
+                        >
+                            {isFetchingJobs ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            {isFetchingJobs ? 'Scanning...' : 'Fetch New Jobs'}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {isFetchingJobs && <LLMProgressBar text="Scanning job portals for new opportunities..." />}
@@ -386,7 +386,7 @@ export default function DashboardPage() {
                                 {topJobs.map(job => (
                                     <Link key={job.id} href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors group">
                                         <div className={`w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center flex-shrink-0`}>
-                                            <span className="text-slate-900 dark:text-white font-black text-sm">{job.score?.score}</span>
+                                            <span className="text-slate-900 dark:text-white font-black text-sm">{job.score?.score.toFixed(1)}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{job.role}</p>
