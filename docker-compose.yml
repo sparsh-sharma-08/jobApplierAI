@@ -24,8 +24,8 @@ services:
       redis:
         condition: service_started
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - backend_data:/app/data
+      - backend_logs:/app/logs
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/" ]
@@ -63,8 +63,8 @@ services:
       - OUTPUT_DIR=/app/data/resumes
       - ENV=${ENV:-production}
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - backend_data:/app/data
+      - backend_logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -110,4 +110,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  logs:
+  backend_data:
+  backend_logs:
