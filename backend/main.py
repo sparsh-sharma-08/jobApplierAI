@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
+import hashlib
 from dotenv import load_dotenv
 
 # Load environment variables as early as possible
@@ -197,11 +198,12 @@ def register(request: Request, user_in: UserCreate, db: Session = Depends(get_db
     
     hashed_password = get_password_hash(user_in.password)
     verification_token = generate_secure_token()
+    hashed_verification_token = hashlib.sha256(verification_token.encode()).hexdigest()
     
     new_user = User(
         email=user_in.email, 
         hashed_password=hashed_password,
-        verification_token=verification_token,
+        verification_token=hashed_verification_token,
         is_verified=False
     )
     db.add(new_user)
@@ -245,7 +247,8 @@ def login(request: Request, user_in: UserCreate, db: Session = Depends(get_db)):
 
 @app.get("/auth/verify-email")
 def verify_email(token: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.verification_token == token).first()
+    hashed_token = hashlib.sha256(token.encode()).hexdigest()
+    user = db.query(User).filter(User.verification_token == hashed_token).first()
     if not user:
         raise HTTPException(status_code=400, detail="Invalid verification token")
         
@@ -261,7 +264,8 @@ def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = 
     user = db.query(User).filter(User.email == req.email).first()
     if user:
         reset_token = generate_secure_token()
-        user.reset_password_token = reset_token
+        hashed_reset_token = hashlib.sha256(reset_token.encode()).hexdigest()
+        user.reset_password_token = hashed_reset_token
         user.reset_password_expires = datetime.utcnow() + timedelta(hours=1)
         db.commit()
         
@@ -277,11 +281,12 @@ def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = 
 @limiter.limit("3/minute")
 @app.post("/auth/reset-password")
 def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    hashed_token = hashlib.sha256(req.token.encode()).hexdigest()
     # Verify token and expiration in a single query for safety
     user = (
         db.query(User)
         .filter(
-            User.reset_password_token == req.token,
+            User.reset_password_token == hashed_token,
             User.reset_password_expires > datetime.utcnow()
         )
         .first()
@@ -303,7 +308,8 @@ def resend_verification(request: Request, req: ForgotPasswordRequest, db: Sessio
     user = db.query(User).filter(User.email == req.email).first()
     if user and not user.is_verified:
         verification_token = generate_secure_token()
-        user.verification_token = verification_token
+        hashed_verification_token = hashlib.sha256(verification_token.encode()).hexdigest()
+        user.verification_token = hashed_verification_token
         db.commit()
         
         from core.tasks import send_auth_email_task
