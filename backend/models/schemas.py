@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: int
     email: str
+    is_verified: bool
     created_at: Optional[datetime]
     class Config:
         from_attributes = True
@@ -25,6 +26,17 @@ class TokenRefreshRequest(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 # Candidate Profile
 class MasterResumeExperience(BaseModel):

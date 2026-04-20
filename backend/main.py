@@ -5,8 +5,17 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
+from dotenv import load_dotenv
+
+# Load environment variables as early as possible
+load_dotenv()
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Request, UploadFile, File, Body
+from core.security import verify_password, get_password_hash
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
@@ -20,14 +29,14 @@ from models.schemas import (
     UserCreate, UserOut, Token, TokenRefreshRequest,
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
-    UrlInput,
+    UrlInput, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
     MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate,
     JobBulkAction,
-    ResumeProfileCreate, ResumeProfileUpdate, ResumeProfileOut
+    ResumeProfileCreate, ResumeProfileUpdate, ResumeProfileOut, StatsOut
 )
 from core.security import (
     get_password_hash, verify_password, create_access_token, create_refresh_token,
-    get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
+    get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM, generate_secure_token
 )
 from core.helpers import profile_to_dict
 from services.scorer import score_job, batch_score_jobs
@@ -45,7 +54,15 @@ from slowapi.errors import RateLimitExceeded
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(title="AI Career Copilot", version="1.0.0")
+IS_PRODUCTION = os.getenv("ENV", "development").lower() == "production"
+
+app = FastAPI(
+    title="AI Career Copilot",
+    version="1.0.0",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -58,37 +75,66 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+
+# Security headers middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if IS_PRODUCTION:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 os.makedirs("./data", exist_ok=True)
 os.makedirs("./data/resumes", exist_ok=True)
 os.makedirs("./logs", exist_ok=True)
 
-app.mount("/data", StaticFiles(directory="./data"), name="data")
+# Static files served only through authenticated /download/ endpoint — no public mount
 
 
 from fastapi.responses import FileResponse
 
+# Resolve download directory relative to project root for safety
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+ALLOWED_DOWNLOAD_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "data", "resumes"))
+
 @app.get("/download/{file_path:path}")
-def download_file(file_path: str):
-    """Serve generated resume/cover letter files for download."""
-    # Handle both relative and absolute paths
-    if file_path.startswith("./"):
-        full_path = os.path.join(os.getcwd(), file_path[2:])
-    elif file_path.startswith("/"):
-        full_path = file_path
-    else:
-        full_path = os.path.join(os.getcwd(), file_path)
+def download_file(
+    file_path: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Serve generated resume/cover letter files for download (authenticated)."""
+    # Reject absolute paths or traversal attempts
+    if file_path.startswith("/") or ".." in file_path:
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    if not os.path.exists(full_path):
-        raise HTTPException(404, f"File not found")
+    full_path = os.path.abspath(os.path.join(ALLOWED_DOWNLOAD_DIR, file_path))
     
+    # Ensure the resolved path stays inside the allowed directory
+    if not full_path.startswith(ALLOWED_DOWNLOAD_DIR):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Force download as attachment
     return FileResponse(
         full_path,
-        media_type="application/pdf" if full_path.endswith(".pdf") else "application/octet-stream",
-        filename=os.path.basename(full_path)
+        media_type="application/octet-stream",
+        filename=os.path.basename(full_path),
+        headers={"Content-Disposition": f"attachment; filename={os.path.basename(full_path)}"}
     )
 
 
@@ -125,26 +171,55 @@ def startup():
 def read_root():
     return {"status": "ok", "message": "AI Career Copilot API is running"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+@app.get("/stats", response_model=StatsOut)
+def get_stats(current_user: User = Depends(get_current_user)):
+    # Example stats endpoint – protected
+    return {"total_profiles": 0, "total_resumes": 0}
+
 
 # ─────────────────────────────────────────
 # AUTH ENDPOINTS
 # ─────────────────────────────────────────
 
 @app.post("/auth/register", response_model=UserOut)
-def register(user_in: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def register(request: Request, user_in: UserCreate, db: Session = Depends(get_db)):
+    if len(user_in.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    
     hashed_password = get_password_hash(user_in.password)
-    new_user = User(email=user_in.email, hashed_password=hashed_password)
+    verification_token = generate_secure_token()
+    
+    new_user = User(
+        email=user_in.email, 
+        hashed_password=hashed_password,
+        verification_token=verification_token,
+        is_verified=False
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    # Send verification email asynchronously
+    from core.tasks import send_auth_email_task
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    verify_url = f"{FRONTEND_URL}/verify-email?token={verification_token}"
+    send_auth_email_task.delay(new_user.email, "verify", verify_url)
+    
     return new_user
 
 
 @app.post("/auth/login", response_model=Token)
-def login(user_in: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, user_in: UserCreate, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_in.email).first()
     if not user or not verify_password(user_in.password, user.hashed_password):
         raise HTTPException(
@@ -152,12 +227,112 @@ def login(user_in: UserCreate, db: Session = Depends(get_db)):
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Please check your inbox.",
+            headers={"X-Error-Code": "EMAIL_NOT_VERIFIED"},
+        )
+        
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token}
+
+
+@app.get("/auth/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.verification_token == token).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification token")
+        
+    user.is_verified = True
+    user.verification_token = None
+    db.commit()
+    return {"message": "Email perfectly verified. You can now login."}
+
+
+@app.post("/auth/forgot-password")
+@limiter.limit("3/minute")
+def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email).first()
+    if user:
+        reset_token = generate_secure_token()
+        user.reset_password_token = reset_token
+        user.reset_password_expires = datetime.utcnow() + timedelta(hours=1)
+        db.commit()
+        
+        from core.tasks import send_auth_email_task
+        FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        reset_url = f"{FRONTEND_URL}/reset-password?token={reset_token}"
+        send_auth_email_task.delay(user.email, "reset", reset_url)
+        
+    # Always return 200 to prevent user enumeration
+    return {"message": "If that email is registered, a password reset link has been sent."}
+
+
+@limiter.limit("3/minute")
+@app.post("/auth/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    # Verify token and expiration in a single query for safety
+    user = (
+        db.query(User)
+        .filter(
+            User.reset_password_token == req.token,
+            User.reset_password_expires > datetime.utcnow()
+        )
+        .first()
+    )
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    
+    user.hashed_password = get_password_hash(req.new_password)
+    user.reset_password_token = None
+    user.reset_password_expires = None
+    db.commit()
+    return {"message": "Password successfully reset. You can now login."}
+
+
+@app.post("/auth/resend-verification")
+@limiter.limit("2/minute")
+def resend_verification(request: Request, req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Resend verification email. Reuses ForgotPasswordRequest schema (just needs email)."""
+    user = db.query(User).filter(User.email == req.email).first()
+    if user and not user.is_verified:
+        verification_token = generate_secure_token()
+        user.verification_token = verification_token
+        db.commit()
+        
+        from core.tasks import send_auth_email_task
+        FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        verify_url = f"{FRONTEND_URL}/verify-email?token={verification_token}"
+        send_auth_email_task.delay(user.email, "verify", verify_url)
+        
+    # Always return 200 to prevent user enumeration
+    return {"message": "If that email is registered and unverified, a new verification link has been sent."}
+
+
+@app.post("/auth/change-password")
+@limiter.limit("3/minute")
+def change_password(
+    request: Request,
+    req: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Change password for authenticated user. Requires current password verification."""
+    if not verify_password(req.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    if req.current_password == req.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    current_user.hashed_password = get_password_hash(req.new_password)
+    db.commit()
+    return {"message": "Password changed successfully."}
 
 
 from jose import JWTError, jwt
@@ -412,14 +587,22 @@ def update_master_resume(
 
 @app.get("/profile/master-resume")
 def get_master_resume(
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get the saved master resume JSON for review/editing."""
-    profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+    """Get the saved master resume JSON from the active or specified profile."""
+    if profile_id:
+        profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
+    else:
+        profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not profile:
+            profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
     if not profile:
-        raise HTTPException(404, "Profile not found")
-    return {"master_resume": profile.master_resume or {}}
+        raise HTTPException(404, "Resume profile not found")
+        
+    return {"master_resume": profile.master_resume or {}, "profile_id": profile.id}
 
 
 # Profile endpoints handle ResumeProfile CRUD now

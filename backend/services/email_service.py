@@ -4,23 +4,24 @@ import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM = os.getenv("SMTP_FROM", "CareerCopilot <noreply@careercopilot.ai>")
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASS = os.getenv("SMTP_PASS")
+SMTP_FROM = os.getenv("SMTP_FROM")
+
+if not SMTP_USER or not SMTP_PASS:
+    raise ValueError("SMTP credentials not set in environment variables")
 
 class EmailService:
     @staticmethod
     def send_email(to_email: str, subject: str, html_content: str):
-        if not SMTP_USER or not SMTP_PASS:
-            logger.warning(f"SMTP credentials not set. Email not sent to {to_email}. Logging content instead:")
-            logger.info(f"SUBJECT: {subject}")
-            logger.info(f"BODY: {html_content[:500]}...")
-            return False
 
         try:
             msg = MIMEMultipart("alternative")
@@ -109,6 +110,99 @@ class EmailService:
                                         You received this email because you're subscribed to weekly top matches.<br>
                                         <a href="http://localhost:3000/settings" style="color: #6366f1; text-decoration: none;">Manage Notifications</a> • <a href="http://localhost:3000/settings" style="color: #6366f1; text-decoration: none;">Unsubscribe</a>
                                     </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+    @staticmethod
+    def get_verification_email_template(redirect_url: str) -> str:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, sans-serif;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table width="100%" max-width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 24px; border: 1px solid #e2e8f0; overflow: hidden;">
+                            <tr>
+                                <td style="padding: 40px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 28px;">Verify Your Email</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px; text-align: center;">
+                                    <p style="color: #475569; font-size: 16px; margin-bottom: 30px;">
+                                        Welcome to CareerCopilot AI! Please verify your email address to get started with your automated job search.
+                                    </p>
+                                    <a href="{redirect_url}" style="display: inline-block; background-color: #10b981; color: #ffffff; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: bold;">Verify Email Address</a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+    @staticmethod
+    def get_reset_password_email_template(redirect_url: str) -> str:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, sans-serif;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table width="100%" max-width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 24px; border: 1px solid #e2e8f0; overflow: hidden;">
+                            <tr>
+                                <td style="padding: 40px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 28px;">Reset Your Password</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px; text-align: center;">
+                                    <p style="color: #475569; font-size: 16px; margin-bottom: 30px;">
+                                        We received a request to reset your password. Click the button below to choose a new password. This link expires in 1 hour.
+                                    </p>
+                                    <a href="{redirect_url}" style="display: inline-block; background-color: #ef4444; color: #ffffff; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: bold;">Reset Password</a>
+                                    <p style="color: #94a3b8; font-size: 14px; margin-top: 30px;">
+                                        If you did not request a password reset, please ignore this email.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+    @staticmethod
+    def get_general_notification_template(subject: str, message: str) -> str:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, sans-serif;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table width="100%" max-width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 24px; border: 1px solid #e2e8f0; overflow: hidden;">
+                            <tr>
+                                <td style="padding: 40px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); text-align: center;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 24px;">{subject}</h1>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px; color: #475569; font-size: 16px; line-height: 1.6;">
+                                    {message}
                                 </td>
                             </tr>
                         </table>

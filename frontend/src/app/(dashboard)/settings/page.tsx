@@ -505,6 +505,107 @@ export default function SettingsPage() {
                             </div>
                         </div>
 
+                        {/* Change Password */}
+                        <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-white/5 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Shield className="w-4 h-4 text-primary-500 dark:text-primary-400" />
+                                <h3 className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Change Password</h3>
+                            </div>
+
+                            {passwordMsg.text && (
+                                <div className={`p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${passwordMsg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30'}`}>
+                                    {passwordMsg.type === 'success' ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                                    {passwordMsg.text}
+                                </div>
+                            )}
+
+                            <div className="space-y-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Current Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showCurrentPw ? 'text' : 'password'}
+                                            value={currentPassword}
+                                            onChange={e => setCurrentPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                            className="w-full max-w-sm px-4 py-2.5 pr-10 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                        />
+                                        <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                            {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">New Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showNewPw ? 'text' : 'password'}
+                                            value={newPassword}
+                                            onChange={e => setNewPassword(e.target.value)}
+                                            placeholder="Min 8 characters"
+                                            className="w-full max-w-sm px-4 py-2.5 pr-10 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                        />
+                                        <button type="button" onClick={() => setShowNewPw(!showNewPw)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                            {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Confirm New Password</label>
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                        placeholder="Re-enter new password"
+                                        className="w-full max-w-sm px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={async () => {
+                                    setPasswordMsg({ text: '', type: '' });
+                                    if (newPassword.length < 8) {
+                                        setPasswordMsg({ text: 'Password must be at least 8 characters.', type: 'error' });
+                                        return;
+                                    }
+                                    if (newPassword !== confirmPassword) {
+                                        setPasswordMsg({ text: 'Passwords do not match.', type: 'error' });
+                                        return;
+                                    }
+                                    setChangingPassword(true);
+                                    try {
+                                        const token = getToken();
+                                        const res = await fetch(`${API}/auth/change-password`, {
+                                            method: 'POST',
+                                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+                                        });
+                                        const data = await res.json();
+                                        if (res.ok) {
+                                            setPasswordMsg({ text: data.message || 'Password changed!', type: 'success' });
+                                            setCurrentPassword('');
+                                            setNewPassword('');
+                                            setConfirmPassword('');
+                                        } else {
+                                            setPasswordMsg({ text: data.message || data.detail || 'Failed to change password.', type: 'error' });
+                                        }
+                                    } catch {
+                                        setPasswordMsg({ text: 'Something went wrong.', type: 'error' });
+                                    } finally {
+                                        setChangingPassword(false);
+                                    }
+                                }}
+                                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+                                className="btn-primary px-5 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                                {changingPassword ? 'Changing...' : 'Change Password'}
+                            </button>
+                        </div>
+
                         {/* Reset Settings */}
                         <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-white/5 space-y-3">
                             <div className="flex items-center gap-2">
@@ -544,6 +645,7 @@ export default function SettingsPage() {
                                     type: 'info',
                                     onConfirm: () => {
                                         localStorage.removeItem('token');
+                                        localStorage.removeItem('refresh_token');
                                         window.location.href = '/';
                                     }
                                 });

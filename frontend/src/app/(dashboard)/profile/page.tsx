@@ -220,24 +220,34 @@ export default function ProfilePage() {
 
     // ─── Save Master Resume ───
     const handleSaveMasterResume = async () => {
-        const token = getToken();
-        if (!token || !masterResume || !activeProfileId) return;
+        if (!masterResume) return;
+        // Ensure we have an active profile to attach the master resume
+        let profileId = activeProfileId;
+        if (!profileId) {
+            // Auto‑create a default profile
+            const newProf = await createProfile('Default');
+            if (newProf) {
+                profileId = newProf.id;
+                setActiveProfileId(profileId);
+            } else {
+                setResumeMsg({ text: 'Failed to create a profile for saving resume.', type: 'error' });
+                return;
+            }
+        }
         setSavingResume(true);
         setResumeMsg({ text: '', type: '' });
-        try {
-            const res = await fetch(`${API}/profile/master-resume?profile_id=${activeProfileId}`, {
-                method: 'PUT',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ master_resume: masterResume }),
-            });
-            if (res.ok) {
-                setEditingResume(false);
-                setResumeMsg({ text: 'Master resume approved and saved!', type: 'success' });
-                // We don't need to manually update profile state here as useResumeProfiles should handle it or we can re-fetch
-            } else throw new Error();
-        } catch { setResumeMsg({ text: 'Failed to save master resume.', type: 'error' }); }
-        finally { setSavingResume(false); }
+        
+        const success = await updateProfile(profileId as number, { master_resume: masterResume });
+        
+        if (success) {
+            setEditingResume(false);
+            setResumeMsg({ text: 'Master resume approved and saved!', type: 'success' });
+        } else {
+            setResumeMsg({ text: 'Failed to save master resume.', type: 'error' });
+        }
+        setSavingResume(false);
     };
+
 
     // ─── Resume Edit helpers ───
     const updateResume = useCallback((updater: (prev: MasterResume) => MasterResume) => {

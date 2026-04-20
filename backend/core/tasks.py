@@ -6,6 +6,9 @@ import logging
 from datetime import datetime
 from celery import Celery
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from models.database import SessionLocal, Job, JobScore, CandidateProfile, Resume, Application
 from services.scorer import score_job
@@ -45,6 +48,39 @@ celery_app.conf.update(
         },
     }
 )
+
+@celery_app.task(name="send_auth_email_task")
+def send_auth_email_task(email: str, email_type: str, url: str):
+    logger.info(f"Starting send_auth_email_task for {email} ({email_type})")
+    from services.email_service import EmailService
+    try:
+        if email_type == "verify":
+            subject = "Verify Your Email - CareerCopilot"
+            html = EmailService.get_verification_email_template(redirect_url=url)
+        elif email_type == "reset":
+            subject = "Reset Your Password - CareerCopilot"
+            html = EmailService.get_reset_password_email_template(redirect_url=url)
+        else:
+            logger.error(f"Unknown email_type: {email_type}")
+            return {"error": f"Unknown email_type: {email_type}"}
+
+        success = EmailService.send_email(to_email=email, subject=subject, html_content=html)
+        return {"success": success, "email_type": email_type}
+    except Exception as e:
+        logger.error(f"Failed to send auth email to {email}: {e}")
+        return {"success": False, "error": str(e)}
+
+@celery_app.task(name="send_notification_task")
+def send_notification_task(email: str, subject: str, message: str):
+    logger.info(f"Starting send_notification_task for {email}")
+    from services.email_service import EmailService
+    try:
+        html = EmailService.get_general_notification_template(subject=subject, message=message)
+        success = EmailService.send_email(to_email=email, subject=subject, html_content=html)
+        return {"success": success}
+    except Exception as e:
+        logger.error(f"Failed to send notification email to {email}: {e}")
+        return {"success": False, "error": str(e)}
 
 @celery_app.task(name="fetch_and_score_jobs_task")
 def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, roles: list, locations: list):

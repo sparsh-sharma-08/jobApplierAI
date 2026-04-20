@@ -3,19 +3,21 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UploadCloud, FileText, CheckCircle2, ChevronRight, Briefcase, Zap, Loader2, DollarSign, Sparkles, Mail, Lock } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, ChevronRight, Briefcase, Zap, Loader2, DollarSign, Sparkles, Mail, Lock, RefreshCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import LandingStory from '@/components/LandingStory';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
-type Step = 'welcome' | 'auth' | 'upload' | 'preferences' | 'reveal';
+type Step = 'welcome' | 'auth' | 'forgot-password' | 'verify-pending' | 'upload' | 'preferences' | 'reveal';
 
 export default function LandingPage() {
     const router = useRouter();
     const [step, setStep] = useState<Step>('welcome');
     const [isProcessing, setIsProcessing] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
+    const [isResending, setIsResending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Auth State
@@ -46,7 +48,14 @@ export default function LandingPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: loginEmail, password: loginPassword }),
         });
-        if (!res.ok) throw new Error('Invalid credentials');
+        if (!res.ok) {
+            const data = await res.json();
+            if (res.status === 403) {
+                // Email not verified — show specific error with resend option
+                throw new Error('EMAIL_NOT_VERIFIED');
+            }
+            throw new Error(data.detail || 'Invalid credentials');
+        }
         const data = await res.json();
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
@@ -58,12 +67,11 @@ export default function LandingPage() {
         e.preventDefault();
         setIsProcessing(true);
         setErrorMsg('');
+        setSuccessMsg('');
 
         try {
             if (isLogin) {
                 await doLogin(email, password);
-                // If they logged in, they might already have a profile. 
-                // Let's just send them to dashboard immediately to avoid rewriting their data.
                 router.push('/dashboard');
                 return;
             } else {
@@ -77,16 +85,63 @@ export default function LandingPage() {
                     const data = await res.json();
                     throw new Error(data.detail || 'Registration failed');
                 }
-                await doLogin(email, password);
-
-                // Advance to upload step for new users
-                setFormData(prev => ({ ...prev, email: email }));
-                setStep('upload');
+                
+                // Don't auto-login — require email verification first
+                setStep('verify-pending');
             }
         } catch (err: any) {
             setErrorMsg(err.message);
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsProcessing(true);
+        setErrorMsg('');
+        setSuccessMsg('');
+
+        try {
+            const res = await fetch(`${API}/auth/forgot-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                setSuccessMsg(data.message || 'If that email is registered, a password reset link has been sent.');
+            } else {
+                throw new Error(data.detail || 'Something went wrong.');
+            }
+        } catch (err: any) {
+            setErrorMsg(err.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        setIsResending(true);
+        setErrorMsg('');
+        setSuccessMsg('');
+        try {
+            const res = await fetch(`${API}/auth/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setSuccessMsg('A new verification link has been sent to your email.');
+            } else {
+                throw new Error(data.detail || 'Something went wrong.');
+            }
+        } catch (err: any) {
+            setErrorMsg(err.message);
+        } finally {
+            setIsResending(false);
         }
     };
 
@@ -192,6 +247,94 @@ export default function LandingPage() {
         />
     );
 
+    const renderForgotPassword = () => (
+        <motion.div
+            key="forgot-password"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border border-slate-100"
+        >
+            <div className="flex justify-center mb-8">
+                <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-xl rotate-3">
+                    <Mail className="w-8 h-8 text-primary-400" />
+                </div>
+            </div>
+
+            <div className="text-center mb-8">
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Password Recovery</h1>
+                <p className="text-slate-500">Enter your email and we'll send you a link to reset your password.</p>
+            </div>
+
+            {errorMsg && (
+                <div className="mb-6 p-4 bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-2xl flex items-start gap-3">
+                    <span className="text-red-700 text-sm font-medium">{errorMsg}</span>
+                </div>
+            )}
+
+            {successMsg && (
+                <div className="mb-6 p-4 bg-emerald-50/80 backdrop-blur-sm border border-emerald-200 rounded-2xl flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <span className="text-emerald-700 text-sm font-medium">{successMsg}</span>
+                        <button 
+                            type="button"
+                            onClick={() => { setStep('auth'); setIsLogin(true); setErrorMsg(''); setSuccessMsg(''); }}
+                            className="block mt-2 text-emerald-600 text-sm font-semibold hover:text-emerald-700 transition-colors"
+                        >
+                            ← Back to Sign In
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-6">
+                <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">Email address</label>
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <Mail className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                        </div>
+                        <input 
+                            type="email" 
+                            value={email} 
+                            onChange={e => setEmail(e.target.value)} 
+                            required
+                            className="block w-full pl-11 pr-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all outline-none"
+                            placeholder="you@example.com" 
+                        />
+                    </div>
+                </div>
+
+                <button 
+                    type="submit" 
+                    disabled={isProcessing}
+                    className="w-full btn-primary py-4 mt-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-70 text-base font-bold shadow-lg shadow-primary-500/25 group transition-all hover:-translate-y-0.5"
+                >
+                    {isProcessing ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                        <>
+                            Send Reset Link
+                            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                        </>
+                    )}
+                </button>
+
+                <div className="pt-6 border-t border-slate-100 flex items-center justify-center">
+                    <button 
+                        type="button"
+                        onClick={() => { setStep('auth'); setErrorMsg(''); }}
+                        className="text-slate-500 font-semibold hover:text-slate-900 transition-colors"
+                    >
+                        ← Back to Sign In
+                    </button>
+                </div>
+            </form>
+        </motion.div>
+    );
+
     const renderAuth = () => (
         <motion.div
             key="auth"
@@ -252,12 +395,33 @@ export default function LandingPage() {
                         <motion.div 
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="mb-8 p-4 bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-2xl flex items-start gap-3"
+                            className={`mb-8 p-4 backdrop-blur-sm border rounded-2xl flex flex-col gap-3 ${errorMsg === 'EMAIL_NOT_VERIFIED' ? 'bg-amber-50/80 border-amber-200' : 'bg-red-50/80 border-red-200'}`}
                         >
-                            <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                <span className="text-red-600 text-xs font-bold">!</span>
-                            </div>
-                            <span className="text-red-700 text-sm font-medium leading-relaxed">{errorMsg}</span>
+                            {errorMsg === 'EMAIL_NOT_VERIFIED' ? (
+                                <>
+                                    <div className="flex items-start gap-3">
+                                        <Mail className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                                        <span className="text-amber-800 text-sm font-medium leading-relaxed">Your email is not verified yet. Please check your inbox for the verification link.</span>
+                                    </div>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleResendVerification}
+                                        disabled={isResending}
+                                        className="w-full py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                                    >
+                                        {isResending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                        {isResending ? 'Sending...' : 'Resend Verification Email'}
+                                    </button>
+                                    {successMsg && <p className="text-emerald-700 text-sm font-medium text-center">{successMsg}</p>}
+                                </>
+                            ) : (
+                                <div className="flex items-start gap-3">
+                                    <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <span className="text-red-600 text-xs font-bold">!</span>
+                                    </div>
+                                    <span className="text-red-700 text-sm font-medium leading-relaxed">{errorMsg}</span>
+                                </div>
+                            )}
                         </motion.div>
                     )}
 
@@ -282,7 +446,7 @@ export default function LandingPage() {
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
                                 <label className="text-sm font-semibold text-slate-700">Password</label>
-                                {isLogin && <a href="#" className="text-sm font-medium text-primary-600 hover:text-primary-700">Forgot password?</a>}
+                                {isLogin && <button type="button" onClick={() => { setStep('forgot-password'); setErrorMsg(''); }} className="text-sm font-medium text-primary-600 hover:text-primary-700">Forgot password?</button>}
                             </div>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -327,6 +491,58 @@ export default function LandingPage() {
                         </p>
                     </div>
                 </div>
+            </div>
+        </motion.div>
+    );
+
+    const renderVerifyPending = () => (
+        <motion.div
+            key="verify-pending"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05, filter: "blur(10px)" }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border border-slate-100 text-center"
+        >
+            <div className="flex justify-center mb-8">
+                <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center border-2 border-emerald-100">
+                    <Mail className="w-10 h-10 text-emerald-500" />
+                </div>
+            </div>
+
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-3">Check Your Email</h1>
+            <p className="text-slate-500 text-base mb-2">We&apos;ve sent a verification link to:</p>
+            <p className="text-slate-900 font-bold text-lg mb-8">{email}</p>
+            <p className="text-slate-400 text-sm mb-8">Click the link in your email to verify your account, then come back here to sign in.</p>
+
+            {errorMsg && (
+                <div className="mb-6 p-3 bg-red-50/80 border border-red-200 rounded-2xl">
+                    <span className="text-red-700 text-sm font-medium">{errorMsg}</span>
+                </div>
+            )}
+            {successMsg && (
+                <div className="mb-6 p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl">
+                    <span className="text-emerald-700 text-sm font-medium">{successMsg}</span>
+                </div>
+            )}
+
+            <div className="space-y-3">
+                <button 
+                    onClick={handleResendVerification}
+                    disabled={isResending}
+                    className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-sm font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                    {isResending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    {isResending ? 'Sending...' : 'Resend Verification Email'}
+                </button>
+
+                <button 
+                    onClick={() => { setIsLogin(true); setStep('auth'); setErrorMsg(''); setSuccessMsg(''); }}
+                    className="w-full btn-primary py-3.5 rounded-2xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-primary-500/20 group transition-all hover:-translate-y-0.5"
+                >
+                    I&apos;ve Verified — Sign In
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
             </div>
         </motion.div>
     );
@@ -530,6 +746,8 @@ export default function LandingPage() {
                 <AnimatePresence mode="wait">
                     {step === 'welcome' && renderWelcome()}
                     {step === 'auth' && renderAuth()}
+                    {step === 'forgot-password' && renderForgotPassword()}
+                    {step === 'verify-pending' && renderVerifyPending()}
                     {step === 'upload' && renderUpload()}
                     {step === 'preferences' && renderPreferences()}
                     {step === 'reveal' && renderReveal()}
