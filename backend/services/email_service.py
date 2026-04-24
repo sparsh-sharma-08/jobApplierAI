@@ -10,11 +10,11 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_HOST = os.getenv("SMTP_HOST") or os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASS = os.getenv("SMTP_PASS")
-SMTP_FROM = os.getenv("SMTP_FROM")
+SMTP_USER = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
+SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
+SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USER
 
 if not SMTP_USER or not SMTP_PASS:
     raise ValueError("SMTP credentials not set in environment variables")
