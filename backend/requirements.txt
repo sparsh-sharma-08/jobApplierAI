@@ -6,6 +6,7 @@ python-multipart==0.0.9
 # Database
 sqlalchemy==2.0.25
 alembic==1.13.1
+psycopg2-binary==2.9.9
 
 # Validation
 pydantic==2.5.3
@@ -14,6 +15,7 @@ pydantic==2.5.3
 openai>=1.30.0
 
 # ML / Scoring (Python 3.9 compatible)
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.4.1
 sentence-transformers==2.7.0
 scikit-learn==1.5.2
