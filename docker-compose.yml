@@ -42,6 +42,7 @@ services:
     container_name: career_copilot_frontend
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - HOSTNAME=0.0.0.0
     depends_on:
       - backend
     restart: unless-stopped

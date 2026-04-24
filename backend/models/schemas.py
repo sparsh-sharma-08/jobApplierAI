@@ -237,3 +237,7 @@ class ColdEmailOut(BaseModel):
 
 class ColdEmailUpdate(BaseModel):
     email_body: str
+
+class StatsOut(BaseModel):
+    total_profiles: int
+    total_resumes: int

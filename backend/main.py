@@ -280,7 +280,7 @@ def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = 
 
 @limiter.limit("3/minute")
 @app.post("/auth/reset-password")
-def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+def reset_password(request: Request, req: ResetPasswordRequest, db: Session = Depends(get_db)):
     hashed_token = hashlib.sha256(req.token.encode()).hexdigest()
     # Verify token and expiration in a single query for safety
     user = (
