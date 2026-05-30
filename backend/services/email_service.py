@@ -15,7 +15,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
 SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USER
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://65.1.163.112")
 
 if not SMTP_USER or not SMTP_PASS:
     raise ValueError("SMTP credentials not set in environment variables")
