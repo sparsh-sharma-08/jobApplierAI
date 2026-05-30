@@ -278,8 +278,8 @@ def forgot_password(request: Request, req: ForgotPasswordRequest, db: Session = 
     return {"message": "If that email is registered, a password reset link has been sent."}
 
 
-@limiter.limit("3/minute")
 @app.post("/auth/reset-password")
+@limiter.limit("3/minute")
 def reset_password(request: Request, req: ResetPasswordRequest, db: Session = Depends(get_db)):
     hashed_token = hashlib.sha256(req.token.encode()).hexdigest()
     # Verify token and expiration in a single query for safety

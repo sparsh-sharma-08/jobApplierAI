@@ -15,6 +15,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
 SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USER
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 if not SMTP_USER or not SMTP_PASS:
     raise ValueError("SMTP credentials not set in environment variables")
@@ -98,7 +99,7 @@ class EmailService:
                                     <div style="margin-top: 32px; text-align: center; padding: 24px; background-color: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0;">
                                         <h4 style="margin: 0; color: #1e293b; font-size: 16px;">Want to see more?</h4>
                                         <p style="margin: 8px 0 20px 0; color: #64748b; font-size: 14px;">Log in to your dashboard to view all new matches and start applying.</p>
-                                        <a href="http://localhost:3000/dashboard" style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 12px 32px; border-radius: 12px; text-decoration: none; font-size: 15px; font-weight: 600;">Open Dashboard</a>
+                                        <a href="{FRONTEND_URL}/dashboard" style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 12px 32px; border-radius: 12px; text-decoration: none; font-size: 15px; font-weight: 600;">Open Dashboard</a>
                                     </div>
                                 </td>
                             </tr>
@@ -108,7 +109,7 @@ class EmailService:
                                     <p style="margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.6;">
                                         CareerCopilot AI • Your Intelligent Job Search Assistant<br>
                                         You received this email because you're subscribed to weekly top matches.<br>
-                                        <a href="http://localhost:3000/settings" style="color: #6366f1; text-decoration: none;">Manage Notifications</a> • <a href="http://localhost:3000/settings" style="color: #6366f1; text-decoration: none;">Unsubscribe</a>
+                                        <a href="{FRONTEND_URL}/settings" style="color: #6366f1; text-decoration: none;">Manage Notifications</a> • <a href="{FRONTEND_URL}/settings" style="color: #6366f1; text-decoration: none;">Unsubscribe</a>
                                     </p>
                                 </td>
                             </tr>
