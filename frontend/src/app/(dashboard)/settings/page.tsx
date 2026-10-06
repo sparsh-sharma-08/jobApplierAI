@@ -319,22 +319,30 @@ export default function SettingsPage() {
                             {ALL_SOURCES.map(source => {
                                 const isEnabled = settings.enabledSources.includes(source);
                                 const colors: Record<string, string> = {
-                                    remotive: 'border-green-200 bg-green-50 dark:border-green-500/30 dark:bg-green-500/5',
-                                    findremotely: 'border-teal-200 bg-teal-50 dark:border-teal-500/30 dark:bg-teal-500/5',
-                                    jobicy: 'border-purple-200 bg-purple-50 dark:border-purple-500/30 dark:bg-purple-500/5',
-                                    himalayas: 'border-sky-200 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/5',
-                                    adzuna: 'border-orange-200 bg-orange-50 dark:border-orange-500/30 dark:bg-orange-500/5',
-                                    instahyre: 'border-indigo-200 bg-indigo-50 dark:border-indigo-500/30 dark:bg-indigo-500/5',
-                                    weworkremotely: 'border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/5',
+                                    linkedin: 'border-blue-300 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/5',
+                                    instahyre: 'border-indigo-300 bg-indigo-50 dark:border-indigo-500/30 dark:bg-indigo-500/5',
+                                    remoteok: 'border-rose-300 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/5',
+                                    hasjob: 'border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/5',
+                                    remotive: 'border-green-300 bg-green-50 dark:border-green-500/30 dark:bg-green-500/5',
+                                    arbeitnow: 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/5',
+                                    themuse: 'border-violet-300 bg-violet-50 dark:border-violet-500/30 dark:bg-violet-500/5',
+                                    jobicy: 'border-purple-300 bg-purple-50 dark:border-purple-500/30 dark:bg-purple-500/5',
+                                    himalayas: 'border-sky-300 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/5',
+                                    weworkremotely: 'border-cyan-300 bg-cyan-50 dark:border-cyan-500/30 dark:bg-cyan-500/5',
+                                    adzuna: 'border-orange-300 bg-orange-50 dark:border-orange-500/30 dark:bg-orange-500/5',
                                 };
                                 const descriptions: Record<string, string> = {
-                                    remotive: 'Remote-first jobs worldwide (free API)',
-                                    findremotely: 'Remote jobs aggregator (free API)',
-                                    jobicy: 'Remote jobs with industry & level info (free API)',
-                                    himalayas: 'Remote jobs with salary data (free API)',
-                                    adzuna: 'Aggregated listings (needs API key)',
-                                    instahyre: 'Premium Indian tech jobs (free API)',
-                                    weworkremotely: 'Top remote job board (RSS feed)',
+                                    linkedin: 'Active India & Remote software engineering jobs (live guest search)',
+                                    instahyre: 'Premier Indian tech startups & enterprise engineering (free API)',
+                                    remoteok: 'Global high-paying remote software engineering jobs (free API)',
+                                    hasjob: 'Indian developer community job board by HasGeek (Atom feed)',
+                                    remotive: 'Remote-first engineering jobs worldwide (free API)',
+                                    arbeitnow: 'Verified remote & software engineering jobs (free API)',
+                                    themuse: 'Curated Software Engineering opportunities (free API)',
+                                    jobicy: 'Remote jobs with industry & seniority info (free API)',
+                                    himalayas: 'Remote software engineering with verified salary data (free API)',
+                                    weworkremotely: 'Top remote programming & devops job board (RSS feed)',
+                                    adzuna: 'Aggregated job board listings (requires API key)',
                                 };
 
                                 return (

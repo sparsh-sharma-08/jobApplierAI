@@ -11,10 +11,6 @@ from dotenv import load_dotenv
 # Load environment variables as early as possible
 load_dotenv()
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Request, UploadFile, File, Body
 from core.security import verify_password, get_password_hash
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,7 +84,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        # Allow PDF previews to be embedded in frames from the frontend
+        if not (request.url.path.startswith("/resumes/") or request.url.path.startswith("/download/")):
+            response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
@@ -176,10 +174,6 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
-@app.get("/stats", response_model=StatsOut)
-def get_stats(current_user: User = Depends(get_current_user)):
-    # Example stats endpoint – protected
-    return {"total_profiles": 0, "total_resumes": 0}
 
 
 # ─────────────────────────────────────────
@@ -656,9 +650,10 @@ def list_jobs(
     from services.scorer import score_job
     
     for job in jobs:
-        # Resolve status
-        if job.applications:
-            job.status = job.applications[0].status
+        # Resolve status for current user
+        user_app = next((a for a in job.applications if a.user_id == current_user.id), None)
+        if user_app:
+            job.status = user_app.status
         else:
             job.status = "saved"
             
@@ -705,27 +700,37 @@ def list_jobs(
 
 
 @app.delete("/jobs/clear")
-def clear_unapplied_jobs(
+def clear_jobs(
+    scope: str = "all",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Find jobs that do not have any applications
-    unapplied_jobs = db.query(Job).filter(
-        Job.user_id == current_user.id,
-        ~Job.applications.any()
-    ).all()
-    
-    count = 0
-    for job in unapplied_jobs:
-        # Related JobScore and Resumes will be cascade-deleted if configured, or we can manually delete them
-        # SQLite with SQLAlchemy sometimes needs manual cleanup if cascade is not set
-        db.query(JobScore).filter(JobScore.job_id == job.id).delete(synchronize_session=False)
-        db.query(Resume).filter(Resume.job_id == job.id).delete(synchronize_session=False)
-        db.delete(job)
-        count += 1
+    query = db.query(Job).filter(Job.user_id == current_user.id)
+    if scope == "unapplied":
+        query = query.filter(~Job.applications.any())
         
+    jobs_to_delete = query.all()
+    job_ids = [j.id for j in jobs_to_delete]
+    count = len(job_ids)
+
+    if job_ids:
+        # Cascade clean all related child records first to avoid foreign key issues
+        db.query(JobScore).filter(JobScore.job_id.in_(job_ids)).delete(synchronize_session=False)
+        db.query(Resume).filter(Resume.job_id.in_(job_ids)).delete(synchronize_session=False)
+        db.query(MockInterview).filter(MockInterview.job_id.in_(job_ids)).delete(synchronize_session=False)
+        db.query(ColdEmail).filter(ColdEmail.job_id.in_(job_ids)).delete(synchronize_session=False)
+        db.query(Application).filter(Application.job_id.in_(job_ids)).delete(synchronize_session=False)
+        db.query(Job).filter(Job.id.in_(job_ids)).delete(synchronize_session=False)
+
+    # Clean any dangling orphaned applications for this user
+    db.query(Application).filter(
+        Application.user_id == current_user.id,
+        (Application.job_id == None) | (~Application.job_id.in_(db.query(Job.id)))
+    ).delete(synchronize_session=False)
+
     db.commit()
-    return {"message": f"Successfully cleared {count} unapplied fetched jobs.", "deleted_count": count}
+    logger.info(f"[Jobs Clear] Cleared {count} jobs (scope={scope}) for user {current_user.id}")
+    return {"message": f"Successfully cleared {count} jobs.", "deleted_count": count}
 
 
 @app.get("/jobs/{job_id}", response_model=JobOut)
@@ -747,8 +752,9 @@ def get_job(
         if not active_profile:
             active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
 
-    if job.applications:
-        job.status = job.applications[0].status
+    user_app = next((a for a in job.applications if a.user_id == current_user.id), None)
+    if user_app:
+        job.status = user_app.status
     else:
         job.status = "saved"
         
@@ -808,23 +814,34 @@ def bulk_action_jobs(
 
     count = 0
     if action.action == "delete":
-        for job in valid_jobs:
-            db.query(JobScore).filter(JobScore.job_id == job.id).delete(synchronize_session=False)
-            db.query(Resume).filter(Resume.job_id == job.id).delete(synchronize_session=False)
-            db.delete(job)
-            count += 1
+        job_ids = [job.id for job in valid_jobs]
+        if job_ids:
+            db.query(JobScore).filter(JobScore.job_id.in_(job_ids)).delete(synchronize_session=False)
+            db.query(Resume).filter(Resume.job_id.in_(job_ids)).delete(synchronize_session=False)
+            db.query(MockInterview).filter(MockInterview.job_id.in_(job_ids)).delete(synchronize_session=False)
+            db.query(ColdEmail).filter(ColdEmail.job_id.in_(job_ids)).delete(synchronize_session=False)
+            db.query(Application).filter(Application.job_id.in_(job_ids)).delete(synchronize_session=False)
+            db.query(Job).filter(Job.id.in_(job_ids)).delete(synchronize_session=False)
         db.commit()
-        return {"message": f"Successfully deleted {count} jobs.", "count": count}
+        return {"message": f"Successfully deleted {len(job_ids)} jobs.", "count": len(job_ids)}
 
     elif action.action == "mark_applied":
+        target_profile_id = action.profile_id
+        if not target_profile_id:
+            def_prof = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+            if not def_prof:
+                def_prof = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+            if def_prof:
+                target_profile_id = def_prof.id
+
         for job in valid_jobs:
             # Check if application exists
-            app_req = db.query(Application).filter(Application.job_id == job.id).first()
+            app_req = db.query(Application).filter(Application.job_id == job.id, Application.user_id == current_user.id).first()
             if not app_req:
                 app_req = Application(
                     job_id=job.id, 
                     user_id=current_user.id, 
-                    profile_id=action.profile_id,
+                    profile_id=target_profile_id,
                     status="applied", 
                     applied_date=datetime.utcnow()
                 )
@@ -832,8 +849,8 @@ def bulk_action_jobs(
             else:
                 app_req.status = "applied"
                 app_req.applied_date = datetime.utcnow()
-                if action.profile_id:
-                    app_req.profile_id = action.profile_id
+                if target_profile_id:
+                    app_req.profile_id = target_profile_id
             count += 1
         db.commit()
         return {"message": f"Successfully marked {count} jobs as applied.", "count": count}
@@ -841,8 +858,6 @@ def bulk_action_jobs(
     raise HTTPException(status_code=400, detail="Invalid action")
 
 
-
-from fastapi import Body
 
 @app.post("/jobs/fetch")
 def fetch_jobs(
@@ -854,13 +869,15 @@ def fetch_jobs(
     if not profile:
         raise HTTPException(400, "Please set up your profile first")
 
-    sources_to_fetch = sources or ["remotive"]
+    sources_to_fetch = sources or [
+        "linkedin", "instahyre", "remoteok", "hasjob", "remotive", "arbeitnow"
+    ]
     
     # Intelligently determine roles:
     # 1. Use explicitly preferred roles if available
     # 2. Fall back to their basic profile skills (first 5)
     # 3. If no skills, look at their master resume job titles
-    # 4. If all else fails, use a completely blank search to fetch generic remote jobs
+    # 4. If all else fails, use Software Engineering roles
     roles = profile.preferred_roles or []
     
     if not roles and profile.skills:
@@ -874,7 +891,7 @@ def fetch_jobs(
                 roles = [title]
                 
     if not roles:
-        roles = [""] # Empty string will trigger an unfettered generic search on most APIs
+        roles = ["Software Engineer", "Backend Developer", "Full Stack Developer"]
         
     locations = profile.preferred_locations or []
 
@@ -985,7 +1002,7 @@ def score_all_jobs(
         raise HTTPException(400, "Profile not found")
 
     profile_dict = profile_to_dict(profile)
-    unscored_jobs = db.query(Job).filter(Job.user_id == current_user.id, ~Job.score.has()).all()
+    unscored_jobs = db.query(Job).filter(Job.user_id == current_user.id, ~Job.scores.any()).all()
     count = 0
 
     for job in unscored_jobs:
@@ -1207,7 +1224,7 @@ def list_applications(
         if status:
             query = query.filter(Application.status == status)
         if profile_id:
-            query = query.filter(Application.profile_id == profile_id)
+            query = query.filter((Application.profile_id == profile_id) | (Application.profile_id == None))
         apps = query.order_by(Application.created_at.desc()).offset(offset).limit(limit).all()
         return apps
     except Exception as e:
@@ -1225,14 +1242,35 @@ def create_application(
     if not job:
         raise HTTPException(404, "Job not found")
 
+    target_profile_id = data.profile_id
+    if not target_profile_id:
+        def_prof = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+        if not def_prof:
+            def_prof = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+        if def_prof:
+            target_profile_id = def_prof.id
+
+    status_to_set = getattr(data, 'status', None) or "applied"
+
     # Check if application already exists for this job and user
     existing_app = db.query(Application).filter(Application.job_id == data.job_id, Application.user_id == current_user.id).first()
     if existing_app:
-        raise HTTPException(status_code=400, detail="This job is already in your tracker.")
+        existing_app.status = status_to_set
+        if status_to_set == "applied":
+            existing_app.applied_date = datetime.utcnow()
+        if target_profile_id:
+            existing_app.profile_id = target_profile_id
+        if data.notes is not None:
+            existing_app.notes = data.notes
+        db.commit()
+        db.refresh(existing_app)
+        return existing_app
 
     app_record = Application(
         job_id=data.job_id, 
-        profile_id=data.profile_id,
+        profile_id=target_profile_id,
+        status=status_to_set,
+        applied_date=datetime.utcnow() if status_to_set == "applied" else None,
         notes=data.notes, 
         user_id=current_user.id
     )
@@ -1257,6 +1295,8 @@ def update_application(
         app_record.status = data.status
         if data.status == "applied":
             app_record.applied_date = datetime.utcnow()
+    if data.profile_id is not None:
+        app_record.profile_id = data.profile_id
     if data.notes is not None:
         app_record.notes = data.notes
 

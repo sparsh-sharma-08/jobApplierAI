@@ -33,6 +33,15 @@ const COLUMNS = [
     { id: 'rejected', title: 'Rejected', color: 'rose' }
 ];
 
+const normalizeStatus = (status?: string): string => {
+    if (!status) return 'pending';
+    const s = status.toLowerCase();
+    if (s === 'interviewing') return 'interview';
+    if (s === 'offered') return 'offer';
+    if (s === 'saved') return 'pending';
+    return s;
+};
+
 // --- SORTABLE CARD COMPONENT ---
 function SortableCard({ app, onDelete }: { app: Application, onDelete: (id: number) => void }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: app.id });
@@ -246,7 +255,7 @@ export default function TrackerPage() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setApplications(data);
+                setApplications(data.map((app: Application) => ({ ...app, status: normalizeStatus(app.status) })));
             }
         } catch (e) {
             console.error(e);
@@ -394,7 +403,7 @@ export default function TrackerPage() {
                                     id={col.id}
                                     title={col.title}
                                     color={col.color}
-                                    applications={applications.filter(a => a.status === col.id)}
+                                    applications={applications.filter(a => normalizeStatus(a.status) === col.id)}
                                     onDelete={handleDeleteApplication}
                                 />
                             </div>

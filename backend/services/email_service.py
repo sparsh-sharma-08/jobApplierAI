@@ -15,14 +15,17 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USER = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
 SMTP_PASS = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USER
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://65.1.163.112")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3001")
 
 if not SMTP_USER or not SMTP_PASS:
-    raise ValueError("SMTP credentials not set in environment variables")
+    logger.warning("SMTP credentials not set in environment variables. Email sending will be disabled.")
 
 class EmailService:
     @staticmethod
     def send_email(to_email: str, subject: str, html_content: str):
+        if not SMTP_USER or not SMTP_PASS:
+            logger.warning(f"Cannot send email to {to_email}: SMTP credentials not configured.")
+            return False
 
         try:
             msg = MIMEMultipart("alternative")

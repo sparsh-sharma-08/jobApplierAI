@@ -9,10 +9,16 @@ import logging
 import numpy as np
 import html
 
-try:
-    from sklearn.metrics.pairwise import cosine_similarity
-except ImportError:
-    pass # Will be handled by the script runner
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Compute cosine similarity using numpy."""
+    a_flat = np.asarray(a).flatten()
+    b_flat = np.asarray(b).flatten()
+    norm_a = np.linalg.norm(a_flat)
+    norm_b = np.linalg.norm(b_flat)
+    if norm_a == 0 or norm_b == 0:
+        return np.array([[0.0]])
+    sim = np.dot(a_flat, b_flat) / (norm_a * norm_b)
+    return np.array([[float(sim)]])
 
 from services.embedding_service import embedding_service
 

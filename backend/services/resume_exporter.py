@@ -204,219 +204,295 @@ def save_resume_docx(resume_data: Dict, job_id: int) -> Optional[str]:
         return None
 
 
-def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) -> Optional[str]:
-    """Generate a clean, ATS-compatible PDF matching the reference resume format."""
-    pdf_path = os.path.join(OUTPUT_DIR, f"resume_job_{job_id}_{_ts()}.pdf")
+def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
+    """Generate a clean, ATS-compatible PDF in memory matching the reference resume format."""
+    import io
+    import re
+    pdf_buffer = io.BytesIO()
 
     try:
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, HRFlowable, Spacer
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.units import inch
         from reportlab.lib import colors
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+        from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_JUSTIFY
 
+        # Letter: 612 x 792 pt. Margins 0.45" left/right, 0.4" top/bottom.
+        # Printable width: 612 - 64.8 = 547.2 pt.
         doc_pdf = SimpleDocTemplate(
-            pdf_path,
+            pdf_buffer,
             pagesize=letter,
-            topMargin=0.5 * inch,
-            bottomMargin=0.5 * inch,
-            leftMargin=0.6 * inch,
-            rightMargin=0.6 * inch
+            topMargin=0.4 * inch,
+            bottomMargin=0.4 * inch,
+            leftMargin=0.45 * inch,
+            rightMargin=0.45 * inch
         )
 
-        # ── Styles ──────────────────────────────────────────────
+        PRIMARY_COLOR = colors.HexColor('#1D4ED8')  # Distinctive professional royal blue
+        DARK_TEXT = colors.HexColor('#0F172A')       # Slate 900
+        SUBTLE_TEXT = colors.HexColor('#475569')     # Slate 600
+
         name_style = ParagraphStyle(
-            'Name', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER,
-            spaceAfter=2, leading=24
+            'Name', fontName='Helvetica-Bold', fontSize=18, alignment=TA_CENTER,
+            textColor=DARK_TEXT, spaceAfter=2, leading=22
         )
         contact_style = ParagraphStyle(
-            'Contact', fontName='Helvetica', fontSize=9, alignment=TA_CENTER,
-            spaceAfter=4, leading=12
+            'Contact', fontName='Helvetica', fontSize=8.5, alignment=TA_CENTER,
+            textColor=SUBTLE_TEXT, spaceAfter=5, leading=11
         )
         section_heading_style = ParagraphStyle(
-            'SectionHeading', fontName='Helvetica-Bold', fontSize=11, 
-            spaceBefore=6, spaceAfter=2, leading=14
+            'SectionHeading', fontName='Helvetica-Bold', fontSize=10, 
+            textColor=PRIMARY_COLOR, spaceBefore=4, spaceAfter=1, leading=13
         )
         body_style = ParagraphStyle(
-            'Body', fontName='Helvetica', fontSize=10, alignment=TA_JUSTIFY,
-            spaceAfter=4, leading=13
+            'Body', fontName='Helvetica', fontSize=9, alignment=TA_JUSTIFY,
+            textColor=DARK_TEXT, spaceAfter=3, leading=12
+        )
+        skill_line_style = ParagraphStyle(
+            'SkillLine', fontName='Helvetica', fontSize=9,
+            textColor=DARK_TEXT, spaceAfter=1.5, leading=12
         )
         project_title_style = ParagraphStyle(
-            'ProjectTitle', fontName='Helvetica-Bold', fontSize=10.5,
-            spaceAfter=1, spaceBefore=4, leading=13
+            'ProjectTitle', fontName='Helvetica-Bold', fontSize=9.5,
+            textColor=DARK_TEXT, spaceAfter=1, leading=12
+        )
+        project_sub_style = ParagraphStyle(
+            'ProjectSub', fontName='Helvetica-Oblique', fontSize=8.5,
+            textColor=SUBTLE_TEXT, leading=11
+        )
+        project_date_style = ParagraphStyle(
+            'ProjectDate', fontName='Helvetica', fontSize=8.5, alignment=TA_RIGHT,
+            textColor=SUBTLE_TEXT, leading=11
         )
         bullet_style = ParagraphStyle(
-            'Bullet', fontName='Helvetica', fontSize=10, leftIndent=18,
-            bulletIndent=8, spaceAfter=2, leading=13, alignment=TA_JUSTIFY
-        )
-        tech_style = ParagraphStyle(
-            'Tech', fontName='Helvetica', fontSize=10, leftIndent=18,
-            spaceAfter=4, leading=12, textColor=colors.HexColor('#222222')
-        )
-        edu_left_style = ParagraphStyle(
-            'EduLeft', fontName='Helvetica-Bold', fontSize=10.5, leading=14
-        )
-        edu_right_style = ParagraphStyle(
-            'EduRight', fontName='Helvetica-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14
-        )
-        edu_detail_style = ParagraphStyle(
-            'EduDetail', fontName='Helvetica', fontSize=10, leftIndent=18, spaceAfter=2, leading=12
+            'Bullet', fontName='Helvetica', fontSize=9, leftIndent=14,
+            firstLineIndent=-10, spaceAfter=1.5, leading=12, alignment=TA_JUSTIFY,
+            textColor=DARK_TEXT
         )
 
         story = []
 
-        # ── NAME ────────────────────────────────────────────────
-        story.append(Paragraph(resume_data.get("name", "").upper(), name_style))
+        def add_heading(title: str):
+            story.append(Paragraph(f"<b>{title.upper()}</b>", section_heading_style))
+            story.append(HRFlowable(width="100%", thickness=0.8, color=PRIMARY_COLOR, spaceBefore=1, spaceAfter=3))
 
-        # ── CONTACT LINE ────────────────────────────────────────
+        # ── 1. Name ──────────────────────────────────────────────
+        name = resume_data.get("name") or "SPARSH SHARMA"
+        story.append(Paragraph(name.upper(), name_style))
+
+        # ── 2. Contact ───────────────────────────────────────────
         contact = resume_data.get("contact", {})
-        contact_parts = []
-        if contact.get("email"): contact_parts.append(contact["email"])
-        if contact.get("phone"): contact_parts.append(contact["phone"])
-        if contact.get("location"): contact_parts.append(contact["location"])
-        
-        # Add links if available
-        links = contact.get("links", [])
-        if links:
-            # just take the first two to keep it clean, usually LinkedIn and GitHub
-            contact_parts.extend(links[:2])
+        parts = []
+        if contact.get("phone"):
+            parts.append(str(contact["phone"]))
+        if contact.get("email"):
+            parts.append(str(contact["email"]))
 
-        if contact_parts:
-            story.append(Paragraph(" | ".join(contact_parts), contact_style))
+        def clean_url(url: str) -> str:
+            if not url: return ""
+            u = str(url).strip()
+            u = re.sub(r'^https?://(www\.)?', '', u).rstrip('/')
+            return u
 
-        # ── SUMMARY ─────────────────────────────────────────────
+        if contact.get("linkedin"):
+            parts.append(clean_url(contact["linkedin"]))
+        if contact.get("github"):
+            parts.append(clean_url(contact["github"]))
+        if contact.get("location"):
+            parts.append(str(contact["location"]))
+
+        if parts:
+            story.append(Paragraph(" | ".join(parts), contact_style))
+
+        # ── 3. Professional Summary ──────────────────────────────
         summary = resume_data.get("summary", "")
         if summary:
-            story.append(Paragraph("<b>SUMMARY</b>", section_heading_style))
-            add_hr()
+            add_heading("Professional Summary")
             story.append(Paragraph(summary, body_style))
 
-        # ── SKILLS ──────────────────────────────────────────────
-        skills = resume_data.get("skills", [])
-        if skills:
-            story.append(Paragraph("<b>SKILLS</b>", section_heading_style))
-            add_hr()
-            # join all skills with a • character in a single paragraph for compactness
-            skills_str = " • ".join(skills)
-            story.append(Paragraph(skills_str, body_style))
-
-        # ── EXPERIENCE ──────────────────────────────────────────
-        experience = resume_data.get("experience", [])
-        if experience:
-            story.append(Paragraph("<b>PROFESSIONAL EXPERIENCE</b>", section_heading_style))
-            for exp in experience:
-                title = exp.get("title", "")
-                company = exp.get("company", "")
-                date_range = f"{exp.get('start_date', '')} - {exp.get('end_date', 'Present')}".strip(" -")
-                location = exp.get("location", "")
-                highlights = exp.get("highlights", [])
-                
-                # Title and Date on same line using table
-                header_data = [
-                    [Paragraph(f"<b>{title}</b>", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=10.5)), 
-                     Paragraph(date_range, ParagraphStyle('D', fontName='Helvetica', fontSize=10, alignment=TA_RIGHT))]
-                ]
-                t = Table(header_data, colWidths=[4*inch, 3.3*inch])
-                t.setStyle(TableStyle([
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 2),
-                ]))
-                story.append(t)
-
-                # Company and Location
-                comp_loc = company
-                if location: comp_loc += f", {location}"
-                story.append(Paragraph(f"<i>{comp_loc}</i>", ParagraphStyle('C', fontName='Helvetica-Oblique', fontSize=10, spaceAfter=3)))
-
-                # Highlights (Bullets)
-                for h in highlights:
-                    # Bold the first word (action verb)
-                    parts = h.split(" ", 1)
-                    if len(parts) == 2:
-                        bullet_text = f"<b>{parts[0]}</b> {parts[1]}"
-                    else:
-                        bullet_text = h
-                    story.append(Paragraph(f"• {bullet_text}", bullet_style))
-                
-                techs = exp.get("technologies", [])
-                if techs:
-                    story.append(Paragraph(f"<b>Tech:</b> {', '.join(techs)}", tech_style))
-
-            add_hr()
-
-        # ── PROJECTS ────────────────────────────────────────────
-        projects = resume_data.get("projects", [])
-        if projects:
-            story.append(Paragraph("<b>PROJECTS</b>", section_heading_style))
-            for proj in projects:
-                name = proj.get("name", "")
-                desc = proj.get("description", "")
-                techs = proj.get("technologies", [])
-                highlights = proj.get("highlights", [])
-
-                # Project Name (bold)
-                story.append(Paragraph(f"<b>{name}</b>", project_title_style))
-                
-                if desc:
-                    story.append(Paragraph(desc, bullet_style))
-                
-                for h in highlights:
-                    # Bold the first word (action verb)
-                    parts = h.split(" ", 1)
-                    if len(parts) == 2:
-                        bullet_text = f"<b>{parts[0]}</b> {parts[1]}"
-                    else:
-                        bullet_text = h
-                    story.append(Paragraph(f"• {bullet_text}", bullet_style))
-
-                if techs:
-                    story.append(Paragraph(f"<b>Tech:</b> {', '.join(techs)}", tech_style))
-
-            add_hr()
-
-        # ── EDUCATION ───────────────────────────────────────────
+        # ── 4. Education ─────────────────────────────────────────
         education = resume_data.get("education", [])
         if education:
-            story.append(Paragraph("<b>EDUCATION</b>", section_heading_style))
+            add_heading("Education")
             for edu in education:
                 degree = edu.get("degree", "")
                 institution = edu.get("institution", "")
                 year = edu.get("year", "")
                 gpa = edu.get("gpa", "")
-                
-                # Degree + Institution on left, Year on right  
-                left_text = f"<b>{degree}</b>"
-                if institution:
-                    left_text += f" — {institution}"
-                
+
+                left_parts = [f"<b>{degree}</b>"]
+                if institution: left_parts.append(institution)
+                if gpa:
+                    gpa_str = str(gpa)
+                    if not any(gpa_str.lower().startswith(x) for x in ["cgpa", "gpa", "percentage", "%"]) and not gpa_str.endswith("%"):
+                        gpa_str = f"CGPA: {gpa_str}"
+                    left_parts.append(gpa_str)
+                left_text = " | ".join(left_parts)
+
                 edu_table = Table(
-                    [[Paragraph(left_text, ParagraphStyle('EduLeft', fontName='Helvetica-Bold', fontSize=10.5, leading=14)), 
-                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduRight', fontName='Helvetica-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14))]],
-                    colWidths=[(doc_pdf.width * 0.75), (doc_pdf.width * 0.25)]
+                    [[Paragraph(left_text, ParagraphStyle('EduL', fontName='Helvetica', fontSize=9, textColor=DARK_TEXT, leading=12)),
+                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduR', fontName='Helvetica', fontSize=9, alignment=TA_RIGHT, textColor=DARK_TEXT, leading=12))]],
+                    colWidths=[420, 127]
                 )
                 edu_table.setStyle(TableStyle([
-                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                    ('TOPPADDING', (0, 0), (-1, -1), 0),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('LEFTPADDING', (0,0), (-1,-1), 0),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                    ('TOPPADDING', (0,0), (-1,-1), 0),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 1.5),
                 ]))
                 story.append(edu_table)
-                
-                if gpa:
-                    story.append(Paragraph(f"• GPA: {gpa}", ParagraphStyle('EduDetail', fontName='Helvetica', fontSize=10, leftIndent=18, spaceAfter=2, leading=12)))
-            
-            add_hr()
 
-        # ── CERTIFICATIONS / ACHIEVEMENTS ───────────────────────
-        certs = resume_data.get("certifications", [])
-        if certs:
-            story.append(Paragraph("<b>ACHIEVEMENTS</b>", section_heading_style))
-            for cert in certs:
-                story.append(Paragraph(f"• {cert}", bullet_style))
+        # ── 5. Technical Skills ──────────────────────────────────
+        skills = resume_data.get("skills", [])
+        if skills:
+            add_heading("Technical Skills")
+            if isinstance(skills, dict):
+                for cat, sk_list in skills.items():
+                    sk_str = ", ".join(sk_list) if isinstance(sk_list, list) else str(sk_list)
+                    story.append(Paragraph(f"<b>{cat}:</b> {sk_str}", skill_line_style))
+            else:
+                categories = {
+                    "Languages": ["python", "javascript", "typescript", "c++", "c", "java", "sql", "html5", "css3"],
+                    "Software Engineering / Backend": ["node.js", "express", "flask", "fastapi", "django", "rest api", "jwt", "oauth", "graphql", "microservices"],
+                    "AI / Generative AI": ["langchain", "rag", "faiss", "hugging face", "pytorch", "scikit-learn", "cursor", "nlp", "llm", "deep learning", "machine learning", "vector search"],
+                    "Frontend": ["react", "react native", "next.js", "nextjs", "vue", "tailwind", "html", "css", "redux"],
+                    "Databases": ["mysql", "mongodb", "sqlite", "postgresql", "firebase", "redis", "dynamodb"],
+                    "DevOps / Tools": ["git", "github", "docker", "linux", "ubuntu", "ci/cd", "render", "aws", "gcp", "azure"]
+                }
+                
+                categorized_output = {}
+                flat_skills = []
+                for s in skills:
+                    if isinstance(s, str) and ":" in s:
+                        parts = s.split(":", 1)
+                        categorized_output[parts[0].strip()] = parts[1].strip()
+                    else:
+                        flat_skills.append(str(s))
+
+                if not categorized_output and flat_skills:
+                    assigned = set()
+                    for cat_name, kw_list in categories.items():
+                        matched = []
+                        for s in flat_skills:
+                            s_clean = s.strip()
+                            s_lower = s_clean.lower()
+                            if s_clean in assigned:
+                                continue
+                            if any(k in s_lower or s_lower in k for k in kw_list):
+                                matched.append(s_clean)
+                                assigned.add(s_clean)
+                        if matched:
+                            categorized_output[cat_name] = ", ".join(matched)
+                    
+                    remaining = [s for s in flat_skills if s not in assigned]
+                    if remaining:
+                        categorized_output["Other Technologies"] = ", ".join(remaining)
+
+                if categorized_output:
+                    for cat_name, sk_str in categorized_output.items():
+                        story.append(Paragraph(f"<b>{cat_name}:</b> {sk_str}", skill_line_style))
+                else:
+                    story.append(Paragraph(" • ".join(str(s) for s in skills), skill_line_style))
+
+        # ── 6. Projects ──────────────────────────────────────────
+        projects = resume_data.get("projects", [])
+        if projects:
+            add_heading("Projects")
+            for proj in projects:
+                name = proj.get("name", "")
+                techs = proj.get("technologies", [])
+                date = proj.get("date", proj.get("year", ""))
+                highlights = proj.get("highlights", [])
+                desc = proj.get("description", "")
+
+                story.append(Paragraph(f"<b>{name}</b>", project_title_style))
+
+                tech_str = ", ".join(techs) if isinstance(techs, list) else str(techs)
+                sub_table = Table(
+                    [[Paragraph(f"<i>{tech_str}</i>", project_sub_style),
+                      Paragraph(f"<b>{date}</b>" if date else "", project_date_style)]],
+                    colWidths=[420, 127]
+                )
+                sub_table.setStyle(TableStyle([
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('LEFTPADDING', (0,0), (-1,-1), 0),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                    ('TOPPADDING', (0,0), (-1,-1), 0),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                ]))
+                story.append(sub_table)
+
+                bullets = list(highlights) if highlights else ([desc] if desc else [])
+                for h in bullets:
+                    h_text = h.strip()
+                    if h_text.startswith("•"):
+                        h_text = h_text.lstrip("•").strip()
+                    words = h_text.split(" ", 1)
+                    if len(words) == 2 and not words[0].startswith("<b>"):
+                        formatted_bullet = f"• <b>{words[0]}</b> {words[1]}"
+                    else:
+                        formatted_bullet = f"• {h_text}"
+                    story.append(Paragraph(formatted_bullet, bullet_style))
+
+        # ── 7. Professional Experience ───────────────────────────
+        experience = resume_data.get("experience", [])
+        if experience:
+            add_heading("Professional Experience")
+            for exp in experience:
+                title = exp.get("title", exp.get("role", ""))
+                company = exp.get("company", "")
+                date_range = exp.get("duration", f"{exp.get('start_date', '')} - {exp.get('end_date', 'Present')}".strip(" -"))
+                location = exp.get("location", "")
+                highlights = exp.get("highlights", [])
+                desc = exp.get("description", "")
+
+                header_left = f"<b>{title}</b> — <i>{company}</i>"
+                if location: header_left += f", {location}"
+
+                exp_table = Table(
+                    [[Paragraph(header_left, project_title_style),
+                      Paragraph(f"<b>{date_range}</b>", project_date_style)]],
+                    colWidths=[420, 127]
+                )
+                exp_table.setStyle(TableStyle([
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('LEFTPADDING', (0,0), (-1,-1), 0),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                    ('TOPPADDING', (0,0), (-1,-1), 0),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+                ]))
+                story.append(exp_table)
+
+                bullets = list(highlights) if highlights else ([desc] if desc else [])
+                for h in bullets:
+                    h_text = h.strip()
+                    if h_text.startswith("•"):
+                        h_text = h_text.lstrip("•").strip()
+                    words = h_text.split(" ", 1)
+                    if len(words) == 2 and not words[0].startswith("<b>"):
+                        formatted_bullet = f"• <b>{words[0]}</b> {words[1]}"
+                    else:
+                        formatted_bullet = f"• {h_text}"
+                    story.append(Paragraph(formatted_bullet, bullet_style))
+
+        # ── 8. Achievements ──────────────────────────────────────
+        achievements = resume_data.get("achievements") or resume_data.get("certifications", [])
+        if achievements:
+            add_heading("Achievements")
+            for ach in achievements:
+                ach_text = ach.strip()
+                if ach_text.startswith("•"):
+                    ach_text = ach_text.lstrip("•").strip()
+                words = ach_text.split(" ", 2)
+                if len(words) >= 2 and any(w.endswith(",") for w in words[:2]):
+                    formatted_ach = f"• <b>{words[0]} {words[1]}</b> {' '.join(words[2:])}"
+                elif len(words) >= 1:
+                    formatted_ach = f"• <b>{words[0]}</b> {' '.join(words[1:])}"
+                else:
+                    formatted_ach = f"• {ach_text}"
+                story.append(Paragraph(formatted_ach, bullet_style))
 
         doc_pdf.build(story)
         pdf_bytes = pdf_buffer.getvalue()
@@ -427,7 +503,22 @@ def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) ->
         logger.warning("reportlab not installed. Skipping PDF export.")
         return None
     except Exception as e:
-        logger.error(f"PDF generation failed: {e}")
+        logger.error(f"PDF generation failed: {e}", exc_info=True)
+        return None
+
+
+def save_resume_pdf(docx_path: Optional[str], resume_data: Dict, job_id: int) -> Optional[str]:
+    """Generate and save the ATS-compatible PDF to disk."""
+    pdf_bytes = generate_resume_pdf_bytes(resume_data)
+    if not pdf_bytes:
+        return None
+    pdf_path = os.path.join(OUTPUT_DIR, f"resume_job_{job_id}_{_ts()}.pdf")
+    try:
+        with open(pdf_path, "wb") as f:
+            f.write(pdf_bytes)
+        return pdf_path
+    except Exception as e:
+        logger.error(f"Failed to write PDF file: {e}")
         return None
 
 
@@ -446,204 +537,4 @@ def export_resume(resume_data: Dict, job_id: int) -> Dict[str, Optional[str]]:
         "docx": docx_path,
         "pdf": pdf_path
     }
-
-def generate_resume_pdf_bytes(resume_data: Dict) -> Optional[bytes]:
-    """Generate a clean, ATS-compatible PDF in memory matching the reference resume format."""
-    import io
-    pdf_buffer = io.BytesIO()
-
-    try:
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.units import inch
-        from reportlab.lib import colors
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
-
-        doc_pdf = SimpleDocTemplate(
-            pdf_buffer,
-            pagesize=letter,
-            topMargin=0.5 * inch,
-            bottomMargin=0.5 * inch,
-            leftMargin=0.6 * inch,
-            rightMargin=0.6 * inch
-        )
-
-        name_style = ParagraphStyle(
-            'Name', fontName='Helvetica-Bold', fontSize=20, alignment=TA_CENTER,
-            spaceAfter=2, leading=24
-        )
-        contact_style = ParagraphStyle(
-            'Contact', fontName='Helvetica', fontSize=9, alignment=TA_CENTER,
-            spaceAfter=4, leading=12
-        )
-        section_heading_style = ParagraphStyle(
-            'SectionHeading', fontName='Helvetica-Bold', fontSize=11, 
-            spaceBefore=6, spaceAfter=2, leading=14
-        )
-        body_style = ParagraphStyle(
-            'Body', fontName='Helvetica', fontSize=10, alignment=TA_JUSTIFY,
-            spaceAfter=4, leading=13
-        )
-        project_title_style = ParagraphStyle(
-            'ProjectTitle', fontName='Helvetica-Bold', fontSize=10.5,
-            spaceAfter=1, spaceBefore=4, leading=13
-        )
-        bullet_style = ParagraphStyle(
-            'Bullet', fontName='Helvetica', fontSize=10, leftIndent=18,
-            firstLineIndent=-10, spaceAfter=2, leading=13
-        )
-        tech_style = ParagraphStyle(
-            'Tech', fontName='Helvetica-Oblique', fontSize=9, leftIndent=18,
-            spaceBefore=1, spaceAfter=4, textColor=colors.grey
-        )
-
-        story = []
-
-        def add_hr():
-            story.append(Spacer(1, 2))
-            story.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceBefore=1, spaceAfter=4))
-
-        # Header
-        name = resume_data.get("name", "Candidate Name")
-        story.append(Paragraph(f"<b>{name}</b>", name_style))
-        
-        contact = resume_data.get("contact", {})
-        contact_parts = []
-        if contact.get("email"): contact_parts.append(contact["email"])
-        if contact.get("phone"): contact_parts.append(contact["phone"])
-        if contact.get("location"): contact_parts.append(contact["location"])
-        
-        links = contact.get("links", [])
-        if links:
-            contact_parts.extend(links[:2])
-
-        if contact_parts:
-            story.append(Paragraph(" | ".join(contact_parts), contact_style))
-
-        # Summary
-        summary = resume_data.get("summary", "")
-        if summary:
-            story.append(Paragraph("<b>SUMMARY</b>", section_heading_style))
-            add_hr()
-            story.append(Paragraph(summary, body_style))
-
-        # Skills
-        skills = resume_data.get("skills", [])
-        if skills:
-            story.append(Paragraph("<b>SKILLS</b>", section_heading_style))
-            add_hr()
-            skills_str = " • ".join(skills)
-            story.append(Paragraph(skills_str, body_style))
-
-        # Experience
-        experience = resume_data.get("experience", [])
-        if experience:
-            story.append(Paragraph("<b>PROFESSIONAL EXPERIENCE</b>", section_heading_style))
-            for exp in experience:
-                title = exp.get("title", "")
-                company = exp.get("company", "")
-                date_range = f"{exp.get('start_date', '')} - {exp.get('end_date', 'Present')}".strip(" -")
-                location = exp.get("location", "")
-                highlights = exp.get("highlights", [])
-                
-                header_data = [
-                    [Paragraph(f"<b>{title}</b>", ParagraphStyle('T', fontName='Helvetica-Bold', fontSize=10.5)), 
-                     Paragraph(date_range, ParagraphStyle('D', fontName='Helvetica', fontSize=10, alignment=TA_RIGHT))]
-                ]
-                t = Table(header_data, colWidths=[4*inch, 3.3*inch])
-                t.setStyle(TableStyle([
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 2),
-                ]))
-                story.append(t)
-
-                comp_loc = company
-                if location: comp_loc += f", {location}"
-                story.append(Paragraph(f"<i>{comp_loc}</i>", ParagraphStyle('C', fontName='Helvetica-Oblique', fontSize=10, spaceAfter=3)))
-
-                for h in highlights:
-                    parts = h.split(" ", 1)
-                    bullet_text = f"<b>{parts[0]}</b> {parts[1]}" if len(parts) == 2 else h
-                    story.append(Paragraph(f"• {bullet_text}", bullet_style))
-                
-                techs = exp.get("technologies", [])
-                if techs:
-                    story.append(Paragraph(f"<b>Tech:</b> {', '.join(techs)}", tech_style))
-
-            add_hr()
-
-        # Projects
-        projects = resume_data.get("projects", [])
-        if projects:
-            story.append(Paragraph("<b>PROJECTS</b>", section_heading_style))
-            for proj in projects:
-                name = proj.get("name", "")
-                desc = proj.get("description", "")
-                techs = proj.get("technologies", [])
-                highlights = proj.get("highlights", [])
-
-                story.append(Paragraph(f"<b>{name}</b>", project_title_style))
-                if desc: story.append(Paragraph(desc, bullet_style))
-                
-                for h in highlights:
-                    parts = h.split(" ", 1)
-                    bullet_text = f"<b>{parts[0]}</b> {parts[1]}" if len(parts) == 2 else h
-                    story.append(Paragraph(f"• {bullet_text}", bullet_style))
-
-                if techs:
-                    story.append(Paragraph(f"<b>Tech:</b> {', '.join(techs)}", tech_style))
-
-            add_hr()
-
-        # Education
-        education = resume_data.get("education", [])
-        if education:
-            story.append(Paragraph("<b>EDUCATION</b>", section_heading_style))
-            for edu in education:
-                degree = edu.get("degree", "")
-                institution = edu.get("institution", "")
-                year = edu.get("year", "")
-                gpa = edu.get("gpa", "")
-
-                left_text = f"<b>{degree}</b>"
-                if institution:
-                    left_text += f" — {institution}"
-                
-                edu_table = Table(
-                    [[Paragraph(left_text, ParagraphStyle('EduL', fontName='Helvetica-Bold', fontSize=10.5, leading=14)), 
-                      Paragraph(f"<b>{year}</b>", ParagraphStyle('EduR', fontName='Helvetica-Bold', fontSize=10.5, alignment=TA_RIGHT, leading=14))]],
-                    colWidths=[4*inch, 3.3*inch]
-                )
-                edu_table.setStyle(TableStyle([
-                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
-                    ('LEFTPADDING', (0,0), (-1,-1), 0), ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 0), ('BOTTOMPADDING', (0,0), (-1,-1), 1),
-                ]))
-                story.append(edu_table)
-                if gpa:
-                    story.append(Paragraph(f"• GPA: {gpa}", ParagraphStyle('GPA', fontName='Helvetica', fontSize=10, leftIndent=18, spaceAfter=2, leading=12)))
-            
-            add_hr()
-
-        # Certifications
-        certs = resume_data.get("certifications", [])
-        if certs:
-            story.append(Paragraph("<b>ACHIEVEMENTS</b>", section_heading_style))
-            for cert in certs:
-                story.append(Paragraph(f"• {cert}", bullet_style))
-
-        doc_pdf.build(story)
-        pdf_bytes = pdf_buffer.getvalue()
-        pdf_buffer.close()
-        return pdf_bytes
-
-    except ImportError:
-        logger.warning("reportlab not installed.")
-        return None
-    except Exception as e:
-        logger.error(f"PDF generation failed: {e}")
-        return None
 

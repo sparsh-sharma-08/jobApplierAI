@@ -184,10 +184,12 @@ class ResumeOut(BaseModel):
 class ApplicationCreate(BaseModel):
     job_id: int
     profile_id: Optional[int] = None
+    status: Optional[str] = "applied"
     notes: Optional[str] = None
 
 class ApplicationUpdate(BaseModel):
     status: Optional[str] = None
+    profile_id: Optional[int] = None
     notes: Optional[str] = None
 
 class ApplicationOut(BaseModel):

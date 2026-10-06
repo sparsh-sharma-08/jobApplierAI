@@ -105,14 +105,24 @@ def fetch_and_score_jobs_task(user_id: int, profile_dict: dict, sources: list, r
             raw_data = job_data.get("raw_data", {})
             is_remote_job = (
                 "remote" in job_loc or "anywhere" in job_loc or "worldwide" in job_loc 
-                or source in ["remotive", "findremotely", "jobicy", "himalayas", "weworkremotely"]
+                or source in ["remotive", "remoteok", "jobicy", "himalayas", "weworkremotely"]
                 or raw_data.get("remote") is True
             )
+
+            # Indian tech hubs expansion
+            indian_tech_cities = [
+                "bengaluru", "bangalore", "hyderabad", "pune", "gurgaon", "gurugram",
+                "noida", "delhi", "mumbai", "chennai", "kolkata", "ahmedabad", "kochi",
+                "trivandrum", "chandigarh", "jaipur", "indore", "india"
+            ]
+            has_india_pref = any("india" in uloc or uloc in ["in"] for uloc in user_locations)
             
             if remote_pref in ["onsite", "hybrid"]:
                 if user_locations and not is_remote_job:
                     # Job is not remote, must explicitly match one of user's requested locations
                     matched_loc = any(uloc in job_loc for uloc in user_locations)
+                    if not matched_loc and has_india_pref:
+                        matched_loc = any(city in job_loc for city in indian_tech_cities)
                     if not matched_loc:
                         logger.info(f"Skipped {job_data.get('role')} at {job_data.get('company')} due to location strictly onsite/hybrid requirement.")
                         continue
@@ -279,7 +289,6 @@ def clean_old_jobs_task(days_old: int = 15):
         db.close()
 
 
-from services.email_service import EmailService
 
 @celery_app.task(name="weekly_digest_task")
 def weekly_digest_task():
@@ -317,15 +326,17 @@ def weekly_digest_task():
             # Format jobs for template
             formatted_jobs = []
             for j in top_jobs:
+                top_score = j.scores[0] if j.scores else None
                 formatted_jobs.append({
                     "role": j.role,
                     "company": j.company,
                     "location": j.location or "Remote",
-                    "score": j.score.score if j.score else 0,
+                    "score": top_score.score if top_score else 0,
                     "apply_link": j.apply_link
                 })
 
             # Generate HTML and send email
+            from services.email_service import EmailService
             html = EmailService.get_weekly_digest_template(
                 user_name=profile.name or user.email.split('@')[0],
                 jobs=formatted_jobs

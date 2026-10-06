@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Upload, Loader2, User, Mail, MapPin, Briefcase, Code2, Linkedin, Github, CheckCircle2, AlertCircle, FileText, Edit3, Save, ChevronDown, ChevronUp, Trash2, Plus, X, Eye } from 'lucide-react';
+import { Upload, Loader2, User, Briefcase, Code2, Linkedin, Github, CheckCircle2, AlertCircle, FileText, Edit3, Save, ChevronDown, ChevronUp, Trash2, Plus, X, Eye } from 'lucide-react';
 import LLMProgressBar from '@/components/LLMProgressBar';
 
 import { useResumeProfiles, ResumeProfile } from '@/hooks/useResumeProfiles';
@@ -77,9 +77,9 @@ export default function ProfilePage() {
     const [savingResume, setSavingResume] = useState(false);
     const [resumeMsg, setResumeMsg] = useState({ text: '', type: '' });
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-        contact: true, summary: true, skills: true, experience: true, projects: true, education: true, certifications: false
+        summary: true, skills: true, experience: true, projects: true, education: true, certifications: false
     });
-    const [activeTab, setActiveTab] = useState<'profile' | 'resume'>('profile');
+
     
     // ─── Modal States ───
     const [isNewProfileModalOpen, setIsNewProfileModalOpen] = useState(false);
@@ -132,7 +132,7 @@ export default function ProfilePage() {
         }
     }, [activeProfile]);
 
-    // ─── Global Profile Save ───
+    // ─── Global Profile Save (contact info) ───
     const handleSaveGlobal = async () => {
         const token = getToken();
         if (!token) return;
@@ -149,10 +149,26 @@ export default function ProfilePage() {
                     min_salary: parseInt(minSalary) || 0,
                 }),
             });
-            if (res.ok) setMsg({ text: 'Global profile saved successfully!', type: 'success' });
+            if (res.ok) setMsg({ text: 'Contact info saved!', type: 'success' });
             else throw new Error('Save failed');
-        } catch { setMsg({ text: 'Failed to save global profile.', type: 'error' }); }
+        } catch { setMsg({ text: 'Failed to save contact info.', type: 'error' }); }
         finally { setSaving(false); }
+    };
+
+    // ─── Sync contact field → global state + masterResume ───
+    const handleContactChange = (field: 'name' | 'email' | 'phone' | 'location' | 'linkedin' | 'github', value: string) => {
+        if (field === 'name') setName(value);
+        if (field === 'email') setEmail(value);
+        if (field === 'phone') setPhone(value);
+        if (field === 'location') setLocation(value);
+        if (field === 'linkedin') setLinkedin(value);
+        if (field === 'github') setGithub(value);
+        // Keep masterResume in sync so Approve & Save captures latest contact values
+        setMasterResume(prev => {
+            if (!prev) return prev;
+            if (field === 'name') return { ...prev, name: value };
+            return { ...prev, contact: { ...prev.contact, [field]: value } };
+        });
     };
 
     // ─── Active Profile Save (Specialized) ───
@@ -195,17 +211,17 @@ export default function ProfilePage() {
             if (res.ok) {
                 const data = await res.json();
                 if (data.parsed_data) {
-                    setMasterResume(normalizeResume(data.parsed_data));
-                    setEditingResume(true);
-                    setActiveTab('resume');
-                    // Also auto-fill profile fields if this is a new profile or empty
                     const p = data.parsed_data;
-                    if (p.name && !name) setName(p.name);
-                    if (p.contact?.email && !email) setEmail(p.contact.email);
-                    if (p.contact?.phone && !phone) setPhone(p.contact.phone);
-                    if (p.contact?.linkedin && !linkedin) setLinkedin(p.contact.linkedin);
-                    if (p.contact?.github && !github) setGithub(p.contact.github);
-                    
+                    const normalized = normalizeResume(p);
+                    setMasterResume(normalized);
+                    setEditingResume(true);
+                    // Sync contact fields to global profile state
+                    if (p.name) setName(p.name);
+                    if (p.contact?.email) setEmail(p.contact.email);
+                    if (p.contact?.phone) setPhone(p.contact.phone);
+                    if (p.contact?.location) setLocation(p.contact.location);
+                    if (p.contact?.linkedin) setLinkedin(p.contact.linkedin);
+                    if (p.contact?.github) setGithub(p.contact.github);
                     if (p.skills?.length) setProfileSkills(p.skills.join(', '));
                     if (p.summary) setProfileSummary(p.summary);
                 }
@@ -301,140 +317,73 @@ export default function ProfilePage() {
                 ))}
             </div>
 
-            {/* Tab Bar */}
-            <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
-                <button onClick={() => setActiveTab('profile')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                        ${activeTab === 'profile' ? 'bg-white dark:bg-slate-900 shadow-md text-primary-700 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-white/5'}`}>
-                    <User className="w-4 h-4" /> Identity & Match Preferences
-                </button>
-                <button onClick={() => setActiveTab('resume')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
-                        ${activeTab === 'resume' ? 'bg-white dark:bg-slate-900 shadow-md text-primary-700 dark:text-primary-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-white/5'}`}>
-                    <FileText className="w-4 h-4" /> Master Resume Designer
-                    {hasResume && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
-                    {!hasResume && <span className="w-2 h-2 rounded-full bg-amber-400" />}
-                </button>
+
+
+            {/* ═══════════════════════════════════════════ */}
+            {/* SPECIALIZED SEARCH PROFILE */}
+            {/* ═══════════════════════════════════════════ */}
+            <div className="glass-card p-6 space-y-5 border-2 border-primary-500/20 shadow-lg animate-in fade-in duration-300">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Briefcase className="w-5 h-5 text-primary-500" /> Specialized Search Profile: <span className="text-primary-600">{profileName}</span>
+                    </h2>
+                    <div className="flex gap-4">
+                        {!activeProfile?.is_default && (
+                            <button onClick={() => updateProfile(activeProfileId!, { is_default: true })} className="text-slate-500 text-sm hover:underline">
+                                Make Default
+                            </button>
+                        )}
+                        <button onClick={handleSaveActiveProfile} disabled={saving} className="text-primary-600 font-bold text-sm hover:underline uppercase tracking-tight">
+                            {saving ? 'Saving...' : 'Save Profile Settings'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Profile Display Name</label>
+                        <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Target Role Title</label>
+                        <input type="text" value={roleTitle} onChange={e => setRoleTitle(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                            placeholder="e.g. Senior Frontend Engineer" />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Target Skills (Match Scoring)</label>
+                    <textarea value={profileSkills} onChange={e => setProfileSkills(e.target.value)} rows={2}
+                        className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                        placeholder="Python, React, AWS..." />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preferred Roles</label>
+                        <input type="text" value={preferredRoles} onChange={e => setPreferredRoles(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                            placeholder="Frontend, React, Javascript..." />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Experience Level</label>
+                        <select value={experienceLevel} onChange={e => setExperienceLevel(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none">
+                            <option value="fresher">Fresher (0-1 years)</option>
+                            <option value="junior">Junior (1-3 years)</option>
+                            <option value="mid">Mid (3-5 years)</option>
+                            <option value="senior">Senior (5+ years)</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             {/* ═══════════════════════════════════════════ */}
-            {/* PROFILE TAB */}
+            {/* MASTER RESUME SECTION */}
             {/* ═══════════════════════════════════════════ */}
-            {activeTab === 'profile' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
-                    {msg.text && (
-                        <div className={`flex items-center gap-2 p-3 rounded-xl text-sm font-medium ${msg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30'}`}>
-                            {msg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                            {msg.text}
-                        </div>
-                    )}
-
-                    <div className="glass-card p-6 space-y-5">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                                <User className="w-5 h-5 text-primary-500" /> Global Identity
-                            </h2>
-                            <button onClick={handleSaveGlobal} disabled={saving} className="text-primary-600 font-medium text-sm hover:underline">
-                                {saving ? 'Saving...' : 'Save Global Info'}
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {[
-                                { label: 'Full Name', value: name, setter: setName, icon: User, placeholder: 'Jane Doe' },
-                                { label: 'Email', value: email, setter: setEmail, icon: Mail, placeholder: 'you@example.com' },
-                                { label: 'Phone', value: phone, setter: setPhone, icon: User, placeholder: '+91 ...' },
-                                { label: 'Location', value: location, setter: setLocation, icon: MapPin, placeholder: 'Mumbai, India' },
-                                { label: 'LinkedIn', value: linkedin, setter: setLinkedin, icon: Linkedin, placeholder: 'linkedin.com/in/...' },
-                                { label: 'GitHub', value: github, setter: setGithub, icon: Github, placeholder: 'github.com/...' },
-                            ].map(field => (
-                                <div key={field.label}>
-                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">{field.label}</label>
-                                    <input type="text" value={field.value} onChange={e => field.setter(e.target.value)}
-                                        className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                        placeholder={field.placeholder} />
-                                </div>
-                            ))}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preferred Locations</label>
-                                <input type="text" value={locations} onChange={e => setLocations(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                    placeholder="Remote, Mumbai, Bangalore..." />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Min Salary Expectation ($)</label>
-                                <input type="number" value={minSalary} onChange={e => setMinSalary(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                    placeholder="80000" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="glass-card p-6 space-y-5 border-2 border-primary-500/20 shadow-lg">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                                <Briefcase className="w-5 h-5 text-primary-500" /> Specialized Search Profile: <span className="text-primary-600">{profileName}</span>
-                            </h2>
-                            <div className="flex gap-4">
-                                {!activeProfile?.is_default && (
-                                    <button onClick={() => updateProfile(activeProfileId!, { is_default: true })} className="text-slate-500 text-sm hover:underline">
-                                        Make Default
-                                    </button>
-                                )}
-                                <button onClick={handleSaveActiveProfile} disabled={saving} className="text-primary-600 font-bold text-sm hover:underline uppercase tracking-tight">
-                                    {saving ? 'Saving...' : 'Save Profile Settings'}
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Profile Display Name</label>
-                                <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Target Role Title</label>
-                                <input type="text" value={roleTitle} onChange={e => setRoleTitle(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                    placeholder="e.g. Senior Frontend Engineer" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Target Skills (Match Scoring)</label>
-                            <textarea value={profileSkills} onChange={e => setProfileSkills(e.target.value)} rows={2}
-                                className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                placeholder="Python, React, AWS..." />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Preferred Roles</label>
-                                <input type="text" value={preferredRoles} onChange={e => setPreferredRoles(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
-                                    placeholder="Frontend, React, Javascript..." />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Experience Level</label>
-                                <select value={experienceLevel} onChange={e => setExperienceLevel(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none">
-                                    <option value="fresher">Fresher (0-1 years)</option>
-                                    <option value="junior">Junior (1-3 years)</option>
-                                    <option value="mid">Mid (3-5 years)</option>
-                                    <option value="senior">Senior (5+ years)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ═══════════════════════════════════════════ */}
-            {/* MASTER RESUME TAB */}
-            {/* ═══════════════════════════════════════════ */}
-            {activeTab === 'resume' && (
+            {(
                 <div className="space-y-6 animate-in fade-in duration-300">
 
                     {resumeMsg.text && (
@@ -502,23 +451,45 @@ export default function ProfilePage() {
                                 </div>
                             </div>
 
-                            {/* ─── Contact ─── */}
-                            <SectionCard title="Contact Info" expanded={expandedSections.contact} onToggle={() => toggleSection('contact')}>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <EditField label="Name" value={masterResume!.name || ''} disabled={!editingResume}
-                                        onChange={v => updateResume(r => ({ ...r, name: v }))} />
-                                    <EditField label="Email" value={masterResume!.contact?.email || ''} disabled={!editingResume}
-                                        onChange={v => updateResume(r => ({ ...r, contact: { ...r.contact, email: v } }))} />
-                                    <EditField label="Phone" value={masterResume!.contact?.phone || ''} disabled={!editingResume}
-                                        onChange={v => updateResume(r => ({ ...r, contact: { ...r.contact, phone: v } }))} />
-                                    <EditField label="Location" value={masterResume!.contact?.location || ''} disabled={!editingResume}
-                                        onChange={v => updateResume(r => ({ ...r, contact: { ...r.contact, location: v } }))} />
-                                    <EditField label="LinkedIn" value={masterResume!.contact?.linkedin || ''} disabled={!editingResume}
-                                        onChange={v => updateResume(r => ({ ...r, contact: { ...r.contact, linkedin: v } }))} />
-                                    <EditField label="GitHub" value={masterResume!.contact?.github || ''} disabled={!editingResume}
-                                        onChange={v => updateResume(r => ({ ...r, contact: { ...r.contact, github: v } }))} />
+                            {/* ─── Contact Info (unified) ─── */}
+                            <div className="glass-card p-5 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                        <User className="w-4 h-4 text-primary-500" /> Contact Info
+                                    </h3>
+                                    <button onClick={handleSaveGlobal} disabled={saving}
+                                        className="text-primary-600 font-medium text-sm hover:underline disabled:opacity-50">
+                                        {saving ? 'Saving...' : 'Save Contact Info'}
+                                    </button>
                                 </div>
-                            </SectionCard>
+                                {msg.text && (
+                                    <div className={`flex items-center gap-2 p-2.5 rounded-lg text-xs font-medium ${
+                                        msg.type === 'success'
+                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                                            : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                                    }`}>
+                                        {msg.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                        {msg.text}
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {([
+                                        { label: 'Full Name', field: 'name' as const, value: name, placeholder: 'Jane Doe' },
+                                        { label: 'Email', field: 'email' as const, value: email, placeholder: 'you@example.com' },
+                                        { label: 'Phone', field: 'phone' as const, value: phone, placeholder: '+91 ...' },
+                                        { label: 'Location', field: 'location' as const, value: location, placeholder: 'Mumbai, India' },
+                                        { label: 'LinkedIn', field: 'linkedin' as const, value: linkedin, placeholder: 'linkedin.com/in/...' },
+                                        { label: 'GitHub', field: 'github' as const, value: github, placeholder: 'github.com/...' },
+                                    ]).map(f => (
+                                        <div key={f.field}>
+                                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">{f.label}</label>
+                                            <input type="text" value={f.value} placeholder={f.placeholder}
+                                                onChange={e => handleContactChange(f.field, e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white/70 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm dark:text-slate-200 focus:ring-2 focus:ring-primary-500 outline-none" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
 
                             {/* ─── Summary ─── */}
                             <SectionCard title="Professional Summary" expanded={expandedSections.summary} onToggle={() => toggleSection('summary')}>

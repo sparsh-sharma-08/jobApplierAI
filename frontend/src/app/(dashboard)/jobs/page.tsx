@@ -6,6 +6,7 @@ import SkeletonCard from '@/components/SkeletonCard';
 import EmptyState from '@/components/EmptyState';
 import LLMProgressBar from '@/components/LLMProgressBar';
 import ConfirmationModal from '@/components/ConfirmationModal';
+import AuthenticatedPdfViewer from '@/components/AuthenticatedPdfViewer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
 import { useResumeProfiles } from '@/hooks/useResumeProfiles';
@@ -109,12 +110,14 @@ export default function JobsPage() {
         isOpen: boolean;
         title: string;
         message: string;
+        confirmLabel?: string;
         onConfirm: () => void;
         type: 'danger' | 'warning' | 'info';
     }>({
         isOpen: false,
         title: '',
         message: '',
+        confirmLabel: 'Confirm',
         onConfirm: () => { },
         type: 'warning'
     });
@@ -210,26 +213,39 @@ export default function JobsPage() {
     const handleClearJobs = async () => {
         const token = getToken();
         if (!token) return;
+
+        if (jobs.length === 0) {
+            toast.info('Your jobs pipeline is already empty.');
+            return;
+        }
         
         setConfirmModal({
             isOpen: true,
-            title: 'Clear Unapplied Jobs',
-            message: 'Are you sure you want to remove all unapplied jobs from your pipeline? This action cannot be undone.',
+            title: 'Clear All Jobs',
+            message: `Are you sure you want to clear all ${jobs.length} jobs from your pipeline? This action cannot be undone.`,
             type: 'danger',
+            confirmLabel: 'Clear All Jobs',
             onConfirm: async () => {
+                const prevJobs = jobs;
+                // Optimistically clear jobs immediately for instant UI feedback
+                setJobs([]);
+                setSelectedJobs(new Set());
+
                 try {
-                    const res = await fetch(`${API}/jobs/clear`, {
+                    const res = await fetch(`${API}/jobs/clear?scope=all`, {
                         method: 'DELETE',
                         headers: { Authorization: `Bearer ${token}` }
                     });
                     if (res.ok) {
                         const data = await res.json();
-                        toast.success(data.message || 'Successfully cleared unapplied jobs!');
-                        fetchJobs(); // Refresh the list
+                        toast.success(data.message || 'All jobs cleared successfully!');
+                        fetchJobs(); // Re-sync
                     } else {
+                        setJobs(prevJobs); // Revert on failure
                         toast.error('Failed to clear jobs.');
                     }
                 } catch {
+                    setJobs(prevJobs); // Revert on network error
                     toast.error('Network error while clearing jobs.');
                 }
             }
@@ -311,45 +327,44 @@ export default function JobsPage() {
         const token = getToken();
         if (!token) return;
 
+        // Optimistically update UI immediately so user gets instant visual feedback
+        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j));
+
         try {
-            // First, ensure an application exists by creating it
-            const createRes = await fetch(`${API}/applications`, {
+            const res = await fetch(`${API}/jobs/bulk-action`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ job_id: jobId })
+                body: JSON.stringify({ 
+                    action: 'mark_applied', 
+                    job_ids: [jobId],
+                    profile_id: activeProfileId
+                })
             });
 
-            let appId;
-            if (createRes.ok) {
-                const appData = await createRes.json();
-                appId = appData.id;
-            } else if (createRes.status === 400) {
-                const errorData = await createRes.json();
-                if (errorData.detail?.includes("already in your tracker")) {
-                    toast.info("Job is already being tracked! 🚀");
-                    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j));
-                    return;
-                }
-                throw new Error(errorData.detail || 'Failed to create application');
+            if (res.ok) {
+                toast.success('Moved to Tracker! 🚀');
             } else {
-                throw new Error('Failed to create application');
-            }
-
-            if (appId) {
-                // Update status to 'applied'
-                await fetch(`${API}/applications/${appId}`, {
-                    method: 'PATCH',
+                // Fallback to /applications
+                const appRes = await fetch(`${API}/applications`, {
+                    method: 'POST',
                     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'applied' })
+                    body: JSON.stringify({ 
+                        job_id: jobId,
+                        profile_id: activeProfileId,
+                        status: 'applied'
+                    })
                 });
-
-                // Update local UI
-                setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'applied' } : j));
-                toast.success('Successfully added to tracker! 🚀');
+                if (appRes.ok) {
+                    toast.success('Moved to Tracker! 🚀');
+                } else {
+                    toast.error('Failed to move job to tracker.');
+                    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'saved' } : j));
+                }
             }
         } catch (e) {
             console.error('Failed to mark as applied', e);
             toast.error('Failed to mark job as applied.');
+            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'saved' } : j));
         }
     };
 
@@ -544,7 +559,7 @@ export default function JobsPage() {
                     title={confirmModal.title}
                     message={confirmModal.message}
                     type={confirmModal.type}
-                    confirmLabel={confirmModal.type === 'danger' ? 'Delete' : 'Confirm'}
+                    confirmLabel={confirmModal.confirmLabel || (confirmModal.type === 'danger' ? 'Delete' : 'Confirm')}
                 />
                 <div className="sm:max-w-md">
                 <h1 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">Jobs Pipeline</h1>
@@ -554,7 +569,8 @@ export default function JobsPage() {
                 </div>
                 <div className="flex gap-3">
                     <button onClick={handleClearJobs}
-                        className="btn-secondary px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-colors">
+                        disabled={jobs.length === 0}
+                        className="btn-secondary px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <Trash2 className="w-4 h-4" />
                         Clear Jobs
                     </button>
@@ -769,7 +785,7 @@ export default function JobsPage() {
                                                 {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                             </span>
                                             <div className="flex-1" />
-                                            {job.status === 'applied' || job.status === 'interviewing' || job.status === 'offered' ? (
+                                            {['applied', 'interview', 'interviewing', 'offer', 'offered', 'rejected', 'pending'].includes(job.status || '') ? (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border border-emerald-100 dark:border-emerald-900/30">
                                                     <CheckCircle2 className="w-3.5 h-3.5" /> Tracked
                                                 </span>
@@ -858,8 +874,9 @@ export default function JobsPage() {
 
                                                     {/* PDF Preview */}
                                                     {viewingPdf === job.id && (
-                                                        <iframe src={resumePath.startsWith('/resumes/') ? `${API}${resumePath}` : `${API}/download/${encodeURIComponent(resumePath)}`}
-                                                            className="w-full h-[500px] rounded-xl border border-slate-200 dark:border-slate-700" />
+                                                        <AuthenticatedPdfViewer
+                                                            url={resumePath.startsWith('/resumes/') ? `${API}${resumePath}` : `${API}/download/${encodeURIComponent(resumePath)}`}
+                                                        />
                                                     )}
 
                                                     {/* Cover Letter */}

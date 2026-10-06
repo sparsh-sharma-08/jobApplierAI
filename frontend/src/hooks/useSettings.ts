@@ -22,7 +22,19 @@ export interface AppSettings {
     theme: 'light' | 'dark' | 'system';
 }
 
-export const ALL_SOURCES = ['remotive', 'findremotely', 'jobicy', 'himalayas', 'adzuna', 'instahyre', 'weworkremotely'];
+export const ALL_SOURCES = [
+    'linkedin',
+    'instahyre',
+    'remoteok',
+    'hasjob',
+    'remotive',
+    'arbeitnow',
+    'themuse',
+    'jobicy',
+    'himalayas',
+    'weworkremotely',
+    'adzuna',
+];
 
 export const DEFAULT_SETTINGS: AppSettings = {
     currency: 'INR',
@@ -45,13 +57,17 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 export const SOURCE_LABELS: Record<string, string> = {
+    linkedin: 'LinkedIn (India & Remote)',
+    instahyre: 'Instahyre (India Tech)',
+    remoteok: 'RemoteOK (Global Remote)',
+    hasjob: 'Hasjob (HasGeek Tech India)',
     remotive: 'Remotive',
-    findremotely: 'FindRemotely',
+    arbeitnow: 'Arbeitnow',
+    themuse: 'The Muse (Engineering)',
     jobicy: 'Jobicy',
     himalayas: 'Himalayas',
-    adzuna: 'Adzuna',
-    instahyre: 'Instahyre',
     weworkremotely: 'WeWorkRemotely',
+    adzuna: 'Adzuna',
 };
 
 export interface SettingsContextType {

@@ -148,14 +148,11 @@ export default function DashboardPage() {
         if (!token) return;
         setIsFetchingJobs(true);
         try {
-            // Assuming missingLocations is derived from settings.enabledSources or defined elsewhere
-            // For this specific instruction, we'll use a placeholder if not defined.
-            // In a real scenario, `missingLocations` would need to be defined.
-            const missingLocations = settings.enabledSources; // Placeholder, adjust as needed
+            const sourcesToFetch = settings.enabledSources?.length > 0 ? settings.enabledSources : null;
             await apiFetch(`${API}/jobs/fetch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(missingLocations.length > 0 ? missingLocations : ['remotive']),
+                body: JSON.stringify(sourcesToFetch),
             });
             let attempts = 0;
             const prevCount = jobs.length;

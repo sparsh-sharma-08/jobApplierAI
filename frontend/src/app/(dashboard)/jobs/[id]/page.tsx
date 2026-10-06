@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import LLMProgressBar from '@/components/LLMProgressBar';
 import { useSettings, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
 import SkeletonCard from '@/components/SkeletonCard';
+import AuthenticatedPdfViewer from '@/components/AuthenticatedPdfViewer';
 import { toast } from 'sonner';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -54,6 +55,7 @@ export default function JobDetailsPage() {
     const [generatingResume, setGeneratingResume] = useState(false);
     const [generatingInterview, setGeneratingInterview] = useState(false);
     const [generatingColdEmail, setGeneratingColdEmail] = useState(false);
+    const [showPdfPreview, setShowPdfPreview] = useState(false);
 
     // Edit states
     const [editingCL, setEditingCL] = useState(false);
@@ -435,16 +437,25 @@ export default function JobDetailsPage() {
                                         <CheckCircle2 className="w-5 h-5" />
                                         <span className="font-semibold">Tailored Resume Ready</span>
                                         <div className="ml-auto flex gap-2">
-                                            <a href={resumeUrl.startsWith('/') ? `${API}${resumeUrl}` : `${API}/download/${encodeURIComponent(resumeUrl)}`} target="_blank" rel="noopener noreferrer"
+                                            <button onClick={() => setShowPdfPreview(!showPdfPreview)}
                                                 className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-2">
-                                                <Eye className="w-3.5 h-3.5" /> Preview PDF
-                                            </a>
+                                                <Eye className="w-3.5 h-3.5" /> {showPdfPreview ? 'Hide PDF' : 'Preview PDF'}
+                                            </button>
                                             <a href={resumeUrl.startsWith('/') ? `${API}${resumeUrl}` : `${API}/download/${encodeURIComponent(resumeUrl)}`} download
                                                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-medium text-xs flex items-center gap-2 transition-colors">
                                                 <Download className="w-3.5 h-3.5" /> Download
                                             </a>
                                         </div>
                                     </div>
+
+                                    {showPdfPreview && (
+                                        <div className="animate-in fade-in duration-200">
+                                            <AuthenticatedPdfViewer
+                                                url={resumeUrl.startsWith('/') ? `${API}${resumeUrl}` : `${API}/download/${encodeURIComponent(resumeUrl)}`}
+                                                title={`Resume - ${job?.company || 'Job'}`}
+                                            />
+                                        </div>
+                                    )}
 
                                     {coverLetter && (
                                             <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">

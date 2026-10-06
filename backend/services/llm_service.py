@@ -111,42 +111,38 @@ def generate_resume(
     profile: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Generate an ATS-optimized resume by using the master_resume DIRECTLY
-    and adding a tailored summary + injecting relevant ATS keywords.
+    Generate an ATS-optimized, detailed resume tailored to the job description.
 
-    NO fabrication — only the user's real data is used.
+    Strategy:
+    1. Use master_resume as the ground truth for all factual content.
+    2. LLM rewrites/enhances bullets for experience and projects to be ATS-optimized.
+    3. LLM generates a tailored professional summary.
+    4. ATS keywords from the JD are injected into skills.
     """
 
     if not master_resume or not master_resume.get("name"):
-        # No master resume available — build from profile
         logger.warning("No master resume found. Building from profile data.")
         master_resume = _build_from_profile(profile)
 
-    # Deep copy to avoid mutating the original
     import copy
     resume = copy.deepcopy(master_resume)
 
     # Extract ATS keywords from the job description
     job_keywords = extract_job_keywords(job_description, job_title)
 
-    # Ensure contact info is populated from profile if missing
+    # ── 1. Ensure contact info is populated ──────────────────────────
     contact = resume.get("contact", {})
-    if not contact.get("email"):
-        contact["email"] = profile.get("email", "")
-    if not contact.get("phone"):
-        contact["phone"] = profile.get("phone", "")
-    if not contact.get("location"):
-        contact["location"] = profile.get("location", "")
-    if not contact.get("linkedin"):
-        contact["linkedin"] = profile.get("linkedin", "")
-    if not contact.get("github"):
-        contact["github"] = profile.get("github", "")
+    if not contact.get("email"):    contact["email"]    = profile.get("email", "")
+    if not contact.get("phone"):    contact["phone"]    = profile.get("phone", "")
+    if not contact.get("location"): contact["location"] = profile.get("location", "")
+    if not contact.get("linkedin"): contact["linkedin"] = profile.get("linkedin", "")
+    if not contact.get("github"):   contact["github"]   = profile.get("github", "")
     resume["contact"] = contact
 
     if not resume.get("name"):
         resume["name"] = profile.get("name", "")
 
-    # Normalize skills to strings
+    # ── 2. Normalize skills to strings ──────────────────────────────
     raw_skills = resume.get("skills", [])
     clean_skills = []
     for s in raw_skills:
@@ -158,14 +154,38 @@ def generate_resume(
             clean_skills.append(str(s))
     resume["skills"] = clean_skills
 
-    # Inject relevant ATS keywords into skills (if not already present)
+    # ── 3. Inject ATS keywords into skills ──────────────────────────
     existing_skills_lower = {s.lower() for s in clean_skills}
     keywords_to_add = [kw for kw in job_keywords if kw not in existing_skills_lower and kw in TECH_KEYWORDS]
-    # Only add keywords that are actually relevant tech skills, not generic words
     if keywords_to_add:
         resume["skills"] = clean_skills + [kw.title() if len(kw) > 3 else kw.upper() for kw in keywords_to_add[:8]]
 
-    # Generate a tailored summary using LLM (or fallback)
+    # ── 4. LLM-enhance experience bullets ───────────────────────────
+    if resume.get("experience"):
+        resume["experience"] = _enhance_bullets_with_llm(
+            items=resume["experience"],
+            item_type="experience",
+            job_title=job_title,
+            job_description=job_description,
+            job_keywords=job_keywords,
+        )
+
+    # ── 5. LLM-enhance project bullets ──────────────────────────────
+    if resume.get("projects"):
+        resume["projects"] = _enhance_bullets_with_llm(
+            items=resume["projects"],
+            item_type="project",
+            job_title=job_title,
+            job_description=job_description,
+            job_keywords=job_keywords,
+        )
+
+    # ── 6. Preserve achievements & certifications ───────────────────
+    achievements = master_resume.get("achievements") or master_resume.get("certifications") or profile.get("certifications", [])
+    if achievements:
+        resume["achievements"] = achievements
+
+    # ── 7. Generate tailored summary ────────────────────────────────
     resume["summary"] = _generate_tailored_summary(
         job_title=job_title,
         company=company,
@@ -175,6 +195,100 @@ def generate_resume(
     )
 
     return resume
+
+
+def _enhance_bullets_with_llm(
+    items: List[Dict],
+    item_type: str,  # "experience" or "project"
+    job_title: str,
+    job_description: str,
+    job_keywords: List[str],
+) -> List[Dict]:
+    """
+    Use LLM to rewrite/enhance bullet points for experience or projects.
+    Keeps all factual content (dates, company names, tech stack) unchanged.
+    Ensures 2-3 detailed, high-impact ATS bullet points per item.
+    Falls back gracefully if LLM fails.
+    """
+    import copy
+    enhanced = copy.deepcopy(items)
+
+    for item in enhanced:
+        if not isinstance(item, dict):
+            continue
+
+        highlights = item.get("highlights", [])
+        description = item.get("description", "")
+        name = item.get("name", item.get("title", item.get("company", "")))
+        techs = item.get("technologies", [])
+
+        # If no highlights exist but description does, convert it to bullets
+        if not highlights and description:
+            highlights = [description]
+
+        if not highlights and not name:
+            continue
+
+        try:
+            client = get_openai_client()
+
+            existing_bullets = "\n".join(f"- {h}" for h in highlights) if highlights else f"- Built and deployed {name}"
+            tech_str = ", ".join(techs) if techs else "Not specified"
+            target_count = 3 if len(highlights) <= 1 else min(len(highlights), 4)
+
+            prompt = f"""You are an expert resume writer specializing in ATS-optimized resumes.
+
+Target Role: {job_title}
+Key Job Keywords: {', '.join(job_keywords[:20])}
+
+{'Project' if item_type == 'project' else 'Experience'} Name: {name}
+Technologies Used: {tech_str}
+
+Current description / bullet points:
+{existing_bullets}
+
+TASK: Generate exactly {target_count} detailed, impactful, ATS-optimized bullet points for the "{job_title}" role.
+
+STRICT RULES:
+1. Keep ALL factual numbers, metrics, technologies, tools, and project names EXACTLY as they are. If original has numbers (e.g., 10,000 documents, <200ms latency, ~92% accuracy, 2,000+ items), preserve and highlight them.
+2. Start each bullet with a strong action verb in past tense (e.g., "Engineered", "Architected", "Developed", "Implemented", "Designed", "Optimized", "Containerized", "Deployed").
+3. Naturally incorporate 2-3 relevant job keywords ({', '.join(job_keywords[:10])}) where technically appropriate.
+4. Each bullet must be 15-28 words long and describe concrete technical implementation, architecture, and impact.
+5. Return EXACTLY {target_count} bullet points, one per line, starting with "• ". No extra text, no headers, no intro."""
+
+            response = _call_llm_with_retry(
+                client=client,
+                messages=[
+                    {"role": "system", "content": "You are an expert ATS resume writer. Return only bullet points starting with '• '. No commentary."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=600
+            )
+
+            content = response.choices[0].message.content.strip()
+
+            # Parse bullet lines
+            lines = [l.strip() for l in content.split("\n") if l.strip()]
+            new_bullets = []
+            for line in lines:
+                cleaned = re.sub(r'^[•\-\*]\s*', '', line).strip()
+                if cleaned and len(cleaned) > 10:
+                    new_bullets.append(cleaned)
+
+            if new_bullets:
+                item["highlights"] = new_bullets
+                if "description" in item:
+                    item["description"] = ""
+        except Exception as e:
+            logger.warning(f"LLM bullet enhancement failed for '{name}': {e}. Using original bullets.")
+            if not item.get("highlights") and description:
+                item["highlights"] = [description]
+                item["description"] = ""
+
+    return enhanced
+
+
 
 
 def _build_from_profile(profile: Dict) -> Dict:
@@ -206,13 +320,24 @@ def _generate_tailored_summary(
 ) -> str:
     """Generate a tailored career objective/summary using LLM, or fallback."""
     # Collect the user's real data points
-    skills = profile.get("skills", [])[:10]
+    raw_skills = profile.get("skills") or master_resume.get("skills", [])
+    skills = []
+    for s in raw_skills:
+        if isinstance(s, str):
+            if ":" in s:
+                skills.extend([w.strip() for w in s.split(":", 1)[1].split(",") if w.strip()])
+            else:
+                skills.append(s)
+        elif isinstance(s, dict):
+            skills.append(s.get("title", s.get("name", str(s))))
+    skills = skills[:12]
+
     exp_level = profile.get("experience_level", "fresher")
     projects = [p.get("name", "") for p in master_resume.get("projects", [])[:3]]
     existing_summary = master_resume.get("summary", "")
 
     # Fallback summary (no LLM needed)
-    fallback_skills = ", ".join(skills[:6])
+    fallback_skills = ", ".join(skills[:6]) if skills else "modern software engineering"
     level_map = {"fresher": "aspiring", "junior": "junior", "mid": "experienced", "senior": "senior"}
     level_word = level_map.get(exp_level, "motivated")
     fallback = (
