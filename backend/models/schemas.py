@@ -142,6 +142,7 @@ class JobOut(BaseModel):
     apply_link: Optional[str] = ""
     posted_date: Optional[datetime] = None
     fetched_date: Optional[datetime] = None
+    recency_label: Optional[str] = None
     score: Optional["JobScoreOut"] = None
     status: Optional[str] = "saved"
     class Config:
@@ -191,6 +192,7 @@ class ApplicationUpdate(BaseModel):
     status: Optional[str] = None
     profile_id: Optional[int] = None
     notes: Optional[str] = None
+    applied_date: Optional[datetime] = None
 
 class ApplicationOut(BaseModel):
     id: int
@@ -199,9 +201,96 @@ class ApplicationOut(BaseModel):
     resume_id: Optional[int]
     status: str
     applied_date: Optional[datetime]
+    applied_date_estimated: Optional[bool] = False
     notes: Optional[str]
     created_at: Optional[datetime]
     job: Optional[JobOut] = None
+    class Config:
+        from_attributes = True
+
+
+# Application Events & Follow-up Tracking
+class ApplicationEventCreate(BaseModel):
+    event_type: str  # applied, followed_up, response_received, phone_screen, technical, final_round, offer, rejected, ghosted
+    event_kind: Optional[str] = None  # day_3, day_7, day_14
+    note: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    applied_date: Optional[datetime] = None
+
+
+class ApplicationEventOut(BaseModel):
+    id: int
+    application_id: int
+    event_type: str
+    event_kind: Optional[str] = None
+    note: Optional[str] = None
+    occurred_at: datetime
+    class Config:
+        from_attributes = True
+
+
+class FollowUpDueOut(BaseModel):
+    kind: str
+    due_since: datetime
+    days_overdue: int
+    message: str
+
+
+class ApplicationFollowUpStateOut(BaseModel):
+    application_id: int
+    applied_date: Optional[datetime]
+    applied_date_estimated: Optional[bool] = False
+    company: str
+    role: str
+    days_since_applied: int
+    due_now: List[FollowUpDueOut]
+    already_followed_up_kinds: List[str]
+    has_response: bool
+    dismissed_kinds: List[str] = []
+    next_action_date: Optional[datetime] = None
+
+
+class FunnelAnalyticsOut(BaseModel):
+    # Raw counts — always shown
+    total_tracked: int          # all applications in tracker
+    applied_count: int          # apps with an applied event or applied_date set
+    response_count: int         # apps with a response_received/phone_screen/etc event
+    interview_count: int        # apps with phone_screen/technical/final_round event
+    offer_count: int
+    rejected_count: int
+    ghosted_count: int
+
+    # Rates — only meaningful when applied_count >= 10
+    response_rate: Optional[float] = None   # response_count / applied_count * 100
+    interview_rate: Optional[float] = None  # interview_count / applied_count * 100
+
+    # Flag: when True the UI should hide percentages and show only counts
+    sample_too_small: bool      # True when applied_count < 10
+
+
+
+# Impact Metrics
+class ImpactMetricCreate(BaseModel):
+    source_ref: str
+    original_bullet: Optional[str] = None
+    question_asked: Optional[str] = None
+    metric_value: str
+    metric_unit: str
+    user_qualifier: Optional[str] = None
+    profile_id: Optional[int] = None
+
+
+class ImpactMetricOut(BaseModel):
+    id: int
+    source_ref: str
+    original_bullet: Optional[str] = None
+    question_asked: Optional[str] = None
+    metric_value: str
+    metric_unit: str
+    user_qualifier: Optional[str] = None
+    user_provided: bool
+    profile_id: Optional[int] = None
+    created_at: datetime
     class Config:
         from_attributes = True
 

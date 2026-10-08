@@ -225,7 +225,7 @@ class LinkedInScraper:
                 continue
 
             date_m = re.search(r"<time[^>]*datetime=\"([^\"]+)\"", card)
-            posted_date = _parse_date(date_m.group(1)) if date_m else datetime.utcnow().isoformat()
+            posted_date = _parse_date(date_m.group(1)) if date_m else None
 
             desc = f"{title} at {company} ({location}). View requirements and apply directly via LinkedIn."
 
@@ -501,7 +501,7 @@ class HasjobScraper:
                 content = _clean_html(content_m.group(1)) if content_m else ""
 
                 pub_m = re.search(r"<(?:published|updated)>(.*?)</(?:published|updated)>", entry)
-                pub_date = _parse_date(pub_m.group(1)) if pub_m else datetime.utcnow().isoformat()
+                pub_date = _parse_date(pub_m.group(1)) if pub_m else None
 
                 # Parse Company and Role
                 if " at " in full_title:
@@ -918,7 +918,7 @@ class WeWorkRemotelyScraper:
                             continue
 
                         job_id = _make_job_id("weworkremotely", link_text)
-                        posted_date = _parse_date(pub_date_text) if pub_date_text else datetime.utcnow().isoformat()
+                        posted_date = _parse_date(pub_date_text) if pub_date_text else None
                         clean_desc = _clean_html(desc_text)
 
                         jobs.append({
@@ -1054,17 +1054,17 @@ def _build_keywords(roles: List[str]) -> List[str]:
     return list(kw)
 
 
-def _parse_date(raw) -> str:
-    """Parse various date formats into ISO string."""
+def _parse_date(raw) -> Optional[str]:
+    """Parse various date formats into ISO string, or None if unknown."""
     if not raw:
-        return datetime.utcnow().isoformat()
+        return None
     try:
         return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).isoformat()
     except Exception:
         try:
             return datetime.fromtimestamp(int(raw)).isoformat()
         except Exception:
-            return datetime.utcnow().isoformat()
+            return None
 
 
 # ─────────────────────────────────────────────────────

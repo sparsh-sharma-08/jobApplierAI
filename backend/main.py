@@ -18,14 +18,22 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 import fitz # PyMuPDF
 
-from models.database import get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore, Resume, Application, MockInterview, ColdEmail, ResumeProfile
+from models.database import (
+    get_db, create_tables, SessionLocal, User, CandidateProfile, Job, JobScore,
+    Resume, Application, MockInterview, ColdEmail, ResumeProfile,
+    ApplicationEvent, ImpactMetric
+)
 from models.schemas import (
     UserCreate, UserOut, Token, TokenRefreshRequest,
     CandidateProfileCreate, CandidateProfileOut,
     JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
+    ApplicationEventCreate, ApplicationEventOut, FollowUpDueOut,
+    ApplicationFollowUpStateOut, FunnelAnalyticsOut,
+    ImpactMetricCreate, ImpactMetricOut,
     UrlInput, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
     MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate,
     JobBulkAction,
@@ -39,6 +47,7 @@ from core.helpers import profile_to_dict
 from services.scorer import score_job, batch_score_jobs
 from services.llm_service import generate_resume, generate_cover_letter, parse_pdf_to_json, generate_mock_interview, generate_cold_email
 from services.resume_exporter import generate_resume_pdf_bytes
+from services.follow_up import compute_follow_up_state, next_follow_up_date, FollowUpKind
 from scrapers.job_scraper import JobScrapeManager
 
 logging.basicConfig(level=logging.INFO)
@@ -148,7 +157,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"error": True, "message": "Validation Error", "details": exc.errors()},
+        content={"error": True, "message": "Validation Error", "details": jsonable_encoder(exc.errors())},
     )
 
 @app.exception_handler(Exception)
@@ -176,6 +185,16 @@ def health_check():
 
 
 
+def is_email_verification_required() -> bool:
+    val = os.getenv("REQUIRE_EMAIL_VERIFICATION", "true").strip().lower()
+    return val not in ("false", "0", "no", "off")
+
+def is_smtp_configured() -> bool:
+    smtp_user = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
+    smtp_pass = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
+    return bool(smtp_user and smtp_pass)
+
+
 # ─────────────────────────────────────────
 # AUTH ENDPOINTS
 # ─────────────────────────────────────────
@@ -191,24 +210,29 @@ def register(request: Request, user_in: UserCreate, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_password = get_password_hash(user_in.password)
+    require_verification = is_email_verification_required()
     verification_token = generate_secure_token()
     hashed_verification_token = hashlib.sha256(verification_token.encode()).hexdigest()
     
     new_user = User(
         email=user_in.email, 
         hashed_password=hashed_password,
-        verification_token=hashed_verification_token,
-        is_verified=False
+        verification_token=hashed_verification_token if require_verification else None,
+        is_verified=not require_verification
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     
-    # Send verification email asynchronously
-    from core.tasks import send_auth_email_task
-    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    verify_url = f"{FRONTEND_URL}/verify-email?token={verification_token}"
-    send_auth_email_task.delay(new_user.email, "verify", verify_url)
+    if require_verification:
+        FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        verify_url = f"{FRONTEND_URL}/verify-email?token={verification_token}"
+        if not is_smtp_configured():
+            logger.info(f"EMAIL VERIFICATION LINK (no SMTP configured): {verify_url}")
+            print(f"[AUTH] EMAIL VERIFICATION LINK (no SMTP configured): {verify_url}", flush=True)
+        else:
+            from core.tasks import send_auth_email_task
+            send_auth_email_task.delay(new_user.email, "verify", verify_url)
     
     return new_user
 
@@ -224,7 +248,7 @@ def login(request: Request, user_in: UserCreate, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    if not user.is_verified:
+    if is_email_verification_required() and not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified. Please check your inbox.",
@@ -300,16 +324,20 @@ def reset_password(request: Request, req: ResetPasswordRequest, db: Session = De
 def resend_verification(request: Request, req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Resend verification email. Reuses ForgotPasswordRequest schema (just needs email)."""
     user = db.query(User).filter(User.email == req.email).first()
-    if user and not user.is_verified:
+    if is_email_verification_required() and user and not user.is_verified:
         verification_token = generate_secure_token()
         hashed_verification_token = hashlib.sha256(verification_token.encode()).hexdigest()
         user.verification_token = hashed_verification_token
         db.commit()
         
-        from core.tasks import send_auth_email_task
         FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
         verify_url = f"{FRONTEND_URL}/verify-email?token={verification_token}"
-        send_auth_email_task.delay(user.email, "verify", verify_url)
+        if not is_smtp_configured():
+            logger.info(f"EMAIL VERIFICATION LINK (no SMTP configured): {verify_url}")
+            print(f"[AUTH] EMAIL VERIFICATION LINK (no SMTP configured): {verify_url}", flush=True)
+        else:
+            from core.tasks import send_auth_email_task
+            send_auth_email_task.delay(user.email, "verify", verify_url)
         
     # Always return 200 to prevent user enumeration
     return {"message": "If that email is registered and unverified, a new verification link has been sent."}
@@ -715,6 +743,9 @@ def clear_jobs(
 
     if job_ids:
         # Cascade clean all related child records first to avoid foreign key issues
+        app_ids = [a[0] for a in db.query(Application.id).filter(Application.job_id.in_(job_ids)).all()]
+        if app_ids:
+            db.query(ApplicationEvent).filter(ApplicationEvent.application_id.in_(app_ids)).delete(synchronize_session=False)
         db.query(JobScore).filter(JobScore.job_id.in_(job_ids)).delete(synchronize_session=False)
         db.query(Resume).filter(Resume.job_id.in_(job_ids)).delete(synchronize_session=False)
         db.query(MockInterview).filter(MockInterview.job_id.in_(job_ids)).delete(synchronize_session=False)
@@ -1255,13 +1286,24 @@ def create_application(
     # Check if application already exists for this job and user
     existing_app = db.query(Application).filter(Application.job_id == data.job_id, Application.user_id == current_user.id).first()
     if existing_app:
+        old_status = existing_app.status
         existing_app.status = status_to_set
-        if status_to_set == "applied":
+        if status_to_set == "applied" and not existing_app.applied_date:
             existing_app.applied_date = datetime.utcnow()
         if target_profile_id:
             existing_app.profile_id = target_profile_id
         if data.notes is not None:
             existing_app.notes = data.notes
+
+        if old_status != status_to_set:
+            event_type = "applied" if status_to_set == "applied" else status_to_set
+            db.add(ApplicationEvent(
+                application_id=existing_app.id,
+                event_type=event_type,
+                occurred_at=datetime.utcnow(),
+                note=f"Status changed to {status_to_set}"
+            ))
+
         db.commit()
         db.refresh(existing_app)
         return existing_app
@@ -1275,6 +1317,15 @@ def create_application(
         user_id=current_user.id
     )
     db.add(app_record)
+    db.flush()
+
+    event_type = "applied" if status_to_set == "applied" else "saved"
+    db.add(ApplicationEvent(
+        application_id=app_record.id,
+        event_type=event_type,
+        occurred_at=datetime.utcnow(),
+        note=f"Application created with status '{status_to_set}'"
+    ))
     db.commit()
     db.refresh(app_record)
     return app_record
@@ -1291,10 +1342,75 @@ def update_application(
     if not app_record:
         raise HTTPException(404, "Application not found")
 
-    if data.status:
+    if data.applied_date is not None:
+        app_record.applied_date = data.applied_date
+        app_record.applied_date_estimated = False
+
+    if data.status and data.status != app_record.status:
+        old_status = app_record.status
+        now_ts = datetime.utcnow()
+
+        has_applied = db.query(ApplicationEvent).filter(
+            ApplicationEvent.application_id == app_record.id,
+            ApplicationEvent.event_type == "applied"
+        ).first() is not None or (app_record.applied_date is not None)
+
+        # C2: Ghosted backfill guard: do not create implicit applied event when moving to ghosted without applied event
+        if data.status in ("ghosted", "no_response") and not has_applied:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot mark an unapplied application as ghosted without an applied date or event"
+            )
+
         app_record.status = data.status
+
+        # C2: For interview/offer/rejected moves, accept optional applied_date;
+        # if none given, backfill with now and note "implicit". Return applied_date_estimated.
+        POST_APPLIED_STATUSES = {"interview", "interviewing", "offer", "offered", "rejected"}
+        if data.status in POST_APPLIED_STATUSES and not has_applied:
+            if data.applied_date:
+                applied_dt = data.applied_date
+                app_record.applied_date = applied_dt
+                app_record.applied_date_estimated = False
+                note = f"Status updated to {data.status} with user-supplied applied date"
+            else:
+                applied_dt = now_ts
+                app_record.applied_date = applied_dt
+                app_record.applied_date_estimated = True
+                note = "implicit: status moved without applied event"
+            db.add(ApplicationEvent(
+                application_id=app_record.id,
+                event_type="applied",
+                occurred_at=applied_dt,
+                note=note
+            ))
+
         if data.status == "applied":
-            app_record.applied_date = datetime.utcnow()
+            if data.applied_date:
+                app_record.applied_date = data.applied_date
+                app_record.applied_date_estimated = False
+            elif not app_record.applied_date:
+                app_record.applied_date = now_ts
+                app_record.applied_date_estimated = False
+
+        event_type_map = {
+            "applied": "applied",
+            "interview": "phone_screen",
+            "interviewing": "phone_screen",
+            "offer": "offer",
+            "offered": "offer",
+            "rejected": "rejected",
+            "ghosted": "ghosted",
+            "no_response": "ghosted"
+        }
+        event_type = event_type_map.get(data.status, data.status)
+        db.add(ApplicationEvent(
+            application_id=app_record.id,
+            event_type=event_type,
+            occurred_at=now_ts,
+            note=f"Status updated from {old_status} to {data.status}"
+        ))
+
     if data.profile_id is not None:
         app_record.profile_id = data.profile_id
     if data.notes is not None:
@@ -1314,9 +1430,434 @@ def delete_application(
     app_record = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
     if not app_record:
         raise HTTPException(404, "Application not found")
+    db.query(ApplicationEvent).filter(ApplicationEvent.application_id == app_id).delete()
     db.delete(app_record)
     db.commit()
     return {"deleted": True}
+
+
+# ─── Funnel Analytics & Follow-up Tracking Endpoints ─────────────────────────
+
+@app.get("/applications/analytics", response_model=FunnelAnalyticsOut)
+def get_funnel_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Funnel analytics for the current user.
+
+    Denominator is applied_count: applications that have an 'applied' event
+    in their timeline OR have applied_date set.  This excludes jobs the user
+    merely saved but never submitted.
+
+    Rates are None (not 0) when applied_count < 10 so the UI can hide them
+    and show only raw counts with a "need more data" note.
+    """
+    apps = db.query(Application).filter(Application.user_id == current_user.id).all()
+    total_tracked = len(apps)
+
+    if total_tracked == 0:
+        return FunnelAnalyticsOut(
+            total_tracked=0,
+            applied_count=0, response_count=0, interview_count=0,
+            offer_count=0, rejected_count=0, ghosted_count=0,
+            response_rate=None, interview_rate=None,
+            sample_too_small=True,
+        )
+
+    app_ids = [a.id for a in apps]
+    events = db.query(ApplicationEvent).filter(
+        ApplicationEvent.application_id.in_(app_ids)
+    ).all()
+
+    # Index events per application
+    events_by_app: dict = {}
+    for ev in events:
+        events_by_app.setdefault(ev.application_id, []).append(ev.event_type)
+
+    # The set of event types that count as an employer response in the funnel analytics.
+    # Note: "ghosted" represents an absence of response and is strictly excluded;
+    # it counts only in the denominator (applied_count), NEVER in response_count.
+    # The following 7 event types count as a response:
+    #   - response_received: recruiter or hiring manager replied
+    #   - phone_screen: initial recruiter phone screening
+    #   - interview: general interview stage
+    #   - technical: technical / coding assessment or technical round
+    #   - final_round: final round / onsite interview
+    #   - offer: formal job offer received
+    #   - rejected: formal rejection received from employer
+    _RESPONSE_EVENTS = {
+        "response_received",
+        "phone_screen",
+        "interview",
+        "technical",
+        "final_round",
+        "offer",
+        "rejected",
+    }
+    _INTERVIEW_EVENTS = {"phone_screen", "interview", "technical", "final_round"}
+
+    applied_count = 0
+    response_count = 0
+    interview_count = 0
+    offer_count = 0
+    rejected_count = 0
+    ghosted_count = 0
+
+    for a in apps:
+        ev_types = set(events_by_app.get(a.id, []))
+
+        # A3 & C2: Applications count as applied if they have an applied event,
+        # an applied_date, a response event, or a post-applied status.
+        # Unapplied apps that were marked ghosted without an applied event/date remain out of the funnel.
+        is_applied = (
+            ("applied" in ev_types)
+            or (a.applied_date is not None)
+            or bool(ev_types & _RESPONSE_EVENTS)
+            or (a.status in ["applied", "interview", "interviewing", "offer", "offered", "rejected"])
+        )
+        if is_applied:
+            applied_count += 1
+
+            # A1 & A4: Ghosted counts in denominator (applied_count) only, never in response_count.
+            # Counts DISTINCT application_id (at most once per application row).
+            has_response = bool(ev_types & _RESPONSE_EVENTS) or (
+                a.status in ["interview", "interviewing", "offer", "offered", "rejected"]
+            )
+            if has_response:
+                response_count += 1
+
+            has_interview = bool(ev_types & _INTERVIEW_EVENTS) or (
+                a.status in ["interview", "interviewing"]
+            )
+            if has_interview:
+                interview_count += 1
+
+        if a.status in ("offer", "offered"):
+            offer_count += 1
+        if a.status == "rejected":
+            rejected_count += 1
+
+        # Ghosted counts in ghosted_count only if applied and no response was received (a response reopens it)
+        is_ghosted = is_applied and (a.status in ("ghosted", "no_response") or ("ghosted" in ev_types)) and not (
+            bool(ev_types & _RESPONSE_EVENTS) or a.status in ["interview", "interviewing", "offer", "offered", "rejected"]
+        )
+        if is_ghosted:
+            ghosted_count += 1
+
+    SAMPLE_THRESHOLD = 10
+    sample_too_small = applied_count < SAMPLE_THRESHOLD
+
+    if not sample_too_small and applied_count > 0:
+        response_rate = round((response_count / applied_count) * 100, 1)
+        interview_rate = round((interview_count / applied_count) * 100, 1)
+    else:
+        response_rate = None
+        interview_rate = None
+
+    return FunnelAnalyticsOut(
+        total_tracked=total_tracked,
+        applied_count=applied_count,
+        response_count=response_count,
+        interview_count=interview_count,
+        offer_count=offer_count,
+        rejected_count=rejected_count,
+        ghosted_count=ghosted_count,
+        response_rate=response_rate,
+        interview_rate=interview_rate,
+        sample_too_small=sample_too_small,
+    )
+
+
+@app.get("/applications/follow-ups", response_model=List[ApplicationFollowUpStateOut])
+def list_application_follow_ups(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    apps = db.query(Application).options(joinedload(Application.job)).filter(
+        Application.user_id == current_user.id,
+        Application.job_id.isnot(None),
+        Application.status.in_(["applied", "interview"])
+    ).all()
+
+    if not apps:
+        return []
+
+    app_ids = [a.id for a in apps]
+    all_events = db.query(ApplicationEvent).filter(ApplicationEvent.application_id.in_(app_ids)).order_by(ApplicationEvent.occurred_at.asc()).all()
+
+    events_by_app = {}
+    for ev in all_events:
+        events_by_app.setdefault(ev.application_id, []).append(ev)
+
+    results = []
+    now = datetime.utcnow()
+    for app_record in apps:
+        app_events = events_by_app.get(app_record.id, [])
+        event_types = [e.event_type for e in app_events]
+        event_kinds = [e.event_kind for e in app_events]
+        applied_dt = app_record.applied_date or app_record.created_at or now
+        company = app_record.job.company if app_record.job else "Company"
+        role = app_record.job.role if app_record.job else "Role"
+
+        st = compute_follow_up_state(
+            application_id=app_record.id,
+            applied_date=applied_dt,
+            company=company,
+            role=role,
+            event_types=event_types,
+            event_kinds=event_kinds,
+            now=now
+        )
+        next_date = next_follow_up_date(applied_dt, st.already_followed_up_kinds + st.dismissed_kinds)
+
+        results.append(ApplicationFollowUpStateOut(
+            application_id=st.application_id,
+            applied_date=st.applied_date,
+            company=st.company,
+            role=st.role,
+            days_since_applied=st.days_since_applied,
+            due_now=[
+                FollowUpDueOut(
+                    kind=d.kind.value,
+                    due_since=d.due_since,
+                    days_overdue=d.days_overdue,
+                    message=d.message
+                ) for d in st.due_now
+            ],
+            already_followed_up_kinds=[k.value for k in st.already_followed_up_kinds],
+            has_response=st.has_response,
+            dismissed_kinds=[k.value for k in st.dismissed_kinds],
+            next_action_date=next_date
+        ))
+
+    return results
+
+
+@app.get("/applications/{app_id}/follow-up", response_model=ApplicationFollowUpStateOut)
+def get_application_follow_up(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    app_record = db.query(Application).options(joinedload(Application.job)).filter(
+        Application.id == app_id, Application.user_id == current_user.id
+    ).first()
+    if not app_record:
+        raise HTTPException(404, "Application not found")
+
+    events = db.query(ApplicationEvent).filter(ApplicationEvent.application_id == app_id).order_by(ApplicationEvent.occurred_at.asc()).all()
+    event_types = [e.event_type for e in events]
+    event_kinds = [e.event_kind for e in events]
+
+    applied_dt = app_record.applied_date or app_record.created_at or datetime.utcnow()
+    company = app_record.job.company if app_record.job else "Company"
+    role = app_record.job.role if app_record.job else "Role"
+
+    st = compute_follow_up_state(
+        application_id=app_record.id,
+        applied_date=applied_dt,
+        company=company,
+        role=role,
+        event_types=event_types,
+        event_kinds=event_kinds,
+        now=datetime.utcnow()
+    )
+
+    next_date = next_follow_up_date(applied_dt, st.already_followed_up_kinds + st.dismissed_kinds)
+
+    return ApplicationFollowUpStateOut(
+        application_id=st.application_id,
+        applied_date=st.applied_date,
+        applied_date_estimated=app_record.applied_date_estimated or False,
+        company=st.company,
+        role=st.role,
+        days_since_applied=st.days_since_applied,
+        due_now=[
+            FollowUpDueOut(
+                kind=d.kind.value,
+                due_since=d.due_since,
+                days_overdue=d.days_overdue,
+                message=d.message
+            ) for d in st.due_now
+        ],
+        already_followed_up_kinds=[k.value for k in st.already_followed_up_kinds],
+        has_response=st.has_response,
+        dismissed_kinds=[k.value for k in st.dismissed_kinds],
+        next_action_date=next_date
+    )
+
+
+@app.get("/applications/{app_id}/events", response_model=List[ApplicationEventOut])
+def get_application_events(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    app_record = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app_record:
+        raise HTTPException(404, "Application not found")
+    return db.query(ApplicationEvent).filter(ApplicationEvent.application_id == app_id).order_by(ApplicationEvent.occurred_at.asc()).all()
+
+
+@app.post("/applications/{app_id}/events", response_model=ApplicationEventOut)
+def create_application_event(
+    app_id: int,
+    data: ApplicationEventCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    app_record = db.query(Application).filter(Application.id == app_id, Application.user_id == current_user.id).first()
+    if not app_record:
+        raise HTTPException(404, "Application not found")
+
+    event_ts = data.occurred_at or datetime.utcnow()
+
+    # The set of event types that count as an employer response in the funnel analytics.
+    # Note: "ghosted" represents an absence of response and is strictly excluded;
+    # it counts only in the denominator (applied_count), NEVER in response_count.
+    # The following 7 event types count as a response:
+    #   - response_received: recruiter or hiring manager replied
+    #   - phone_screen: initial recruiter phone screening
+    #   - interview: general interview stage
+    #   - technical: technical / coding assessment or technical round
+    #   - final_round: final round / onsite interview
+    #   - offer: formal job offer received
+    #   - rejected: formal rejection received from employer
+    _RESPONSE_EVENTS = {
+        "response_received",
+        "phone_screen",
+        "interview",
+        "technical",
+        "final_round",
+        "offer",
+        "rejected",
+    }
+
+    has_applied = db.query(ApplicationEvent).filter(
+        ApplicationEvent.application_id == app_id,
+        ApplicationEvent.event_type == "applied"
+    ).first() is not None or (app_record.applied_date is not None)
+
+    # C2: Ghosted backfill guard
+    if data.event_type in ("ghosted",) and not has_applied:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot mark an unapplied application as ghosted without an applied date or event"
+        )
+
+    # C2 & A3: When an event moves to a response/post-applied state and no applied event exists
+    if data.event_type in _RESPONSE_EVENTS and not has_applied:
+        if data.applied_date:
+            applied_dt = data.applied_date
+            app_record.applied_date = applied_dt
+            app_record.applied_date_estimated = False
+            note = f"Status updated to {data.event_type} with user-supplied applied date"
+        else:
+            applied_dt = event_ts
+            app_record.applied_date = applied_dt
+            app_record.applied_date_estimated = True
+            note = "implicit: status moved without applied event"
+        db.add(ApplicationEvent(
+            application_id=app_id,
+            event_type="applied",
+            occurred_at=applied_dt,
+            note=note
+        ))
+
+    # A1: A response event on a ghosted application reopens it: status leaves "ghosted" and the response counts.
+    if app_record.status in ("ghosted", "no_response") and data.event_type in _RESPONSE_EVENTS:
+        reopen_status_map = {
+            "response_received": "applied",
+            "phone_screen": "interview",
+            "interview": "interview",
+            "technical": "interview",
+            "final_round": "interview",
+            "offer": "offer",
+            "rejected": "rejected",
+        }
+        app_record.status = reopen_status_map.get(data.event_type, "applied")
+
+    # Idempotency check: prevent duplicate event storage at write time (C3: includes response_received)
+    existing = None
+    if data.event_kind:
+        existing = db.query(ApplicationEvent).filter(
+            ApplicationEvent.application_id == app_id,
+            ApplicationEvent.event_type == data.event_type,
+            ApplicationEvent.event_kind == data.event_kind
+        ).first()
+    elif data.event_type in ("applied", "ghosted", "response_received"):
+        existing = db.query(ApplicationEvent).filter(
+            ApplicationEvent.application_id == app_id,
+            ApplicationEvent.event_type == data.event_type
+        ).first()
+
+    if existing:
+        return existing
+
+    event = ApplicationEvent(
+        application_id=app_id,
+        event_type=data.event_type,
+        event_kind=data.event_kind,
+        note=data.note,
+        occurred_at=event_ts
+    )
+    db.add(event)
+
+    # If the event implies a status update, sync application status
+    status_map = {
+        "phone_screen": "interview",
+        "interview": "interview",
+        "technical": "interview",
+        "final_round": "interview",
+        "offer": "offer",
+        "rejected": "rejected",
+        "ghosted": "ghosted",
+    }
+    if data.event_type in status_map:
+        app_record.status = status_map[data.event_type]
+
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+# ─── Impact Metrics Endpoints ────────────────────────────────────────────────
+
+@app.get("/impact-metrics", response_model=List[ImpactMetricOut])
+def list_impact_metrics(
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = db.query(ImpactMetric).filter(ImpactMetric.user_id == current_user.id)
+    if profile_id:
+        query = query.filter((ImpactMetric.profile_id == profile_id) | (ImpactMetric.profile_id == None))
+    return query.order_by(ImpactMetric.created_at.desc()).all()
+
+
+@app.post("/impact-metrics", response_model=ImpactMetricOut)
+def create_impact_metric(
+    data: ImpactMetricCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    metric = ImpactMetric(
+        user_id=current_user.id,
+        profile_id=data.profile_id,
+        source_ref=data.source_ref,
+        original_bullet=data.original_bullet,
+        question_asked=data.question_asked,
+        metric_value=data.metric_value,
+        metric_unit=data.metric_unit,
+        user_qualifier=data.user_qualifier,
+        user_provided=True,
+        created_at=datetime.utcnow()
+    )
+    db.add(metric)
+    db.commit()
+    db.refresh(metric)
+    return metric
 
 
 @app.post("/applications/{app_id}/apply")

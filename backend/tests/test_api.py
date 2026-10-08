@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from main import app
-from models.database import Base, get_db
+from models.database import Base, get_db, User
 
 # Use in-memory SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -18,8 +18,6 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base.metadata.create_all(bind=engine)
-
 def override_get_db():
     try:
         db = TestingSessionLocal()
@@ -27,15 +25,17 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
-
 client = TestClient(app)
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = override_get_db
     yield
+    app.dependency_overrides.pop(get_db, None)
     Base.metadata.drop_all(bind=engine)
+    if os.path.exists("./test.db"):
+        os.remove("./test.db")
 
 def test_health():
     # FastAPI doesn't have a /health route natively unless implemented,
@@ -49,11 +49,18 @@ def test_user_registration():
     )
     assert response.status_code == 200
     assert response.json()["email"] == "testuser@example.com"
+    # Mark user verified for subsequent login tests
+    db = TestingSessionLocal()
+    user = db.query(User).filter(User.email == "testuser@example.com").first()
+    if user:
+        user.is_verified = True
+        db.commit()
+    db.close()
 
 def test_user_login():
     response = client.post(
         "/auth/login",
-        data={"username": "testuser@example.com", "password": "testpassword123"}
+        json={"email": "testuser@example.com", "password": "testpassword123"}
     )
     assert response.status_code == 200
     assert "access_token" in response.json()
@@ -70,7 +77,7 @@ def test_create_profile_with_auth():
     # Login first
     login_response = client.post(
         "/auth/login",
-        data={"username": "testuser@example.com", "password": "testpassword123"}
+        json={"email": "testuser@example.com", "password": "testpassword123"}
     )
     token = login_response.json()["access_token"]
     
@@ -91,7 +98,7 @@ def test_create_profile_with_auth():
 def test_fetch_jobs_with_auth():
     login_response = client.post(
         "/auth/login",
-        data={"username": "testuser@example.com", "password": "testpassword123"}
+        json={"email": "testuser@example.com", "password": "testpassword123"}
     )
     token = login_response.json()["access_token"]
     
