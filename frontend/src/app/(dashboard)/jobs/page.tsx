@@ -12,6 +12,9 @@ import { useSettings, CURRENCY_SYMBOLS } from '@/hooks/useSettings';
 import { useResumeProfiles } from '@/hooks/useResumeProfiles';
 import { toast } from 'sonner';
 
+import LinkedInSearchMenu from '@/components/LinkedInSearchMenu';
+import AddJobModal from '@/components/AddJobModal';
+
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 interface Job {
@@ -24,7 +27,8 @@ interface Job {
     salary: string;
     description: string;
     apply_link: string;
-    posted_date: string;
+    posted_date: string | null;
+    recency_label?: string | null;
     status: string;
     score: { score: number; explanation: { matched_skills: string[]; missing_keywords: string[]; experience_match: string; recommendations: string[] } } | null;
 }
@@ -80,6 +84,9 @@ export default function JobsPage() {
     const [isFetching, setIsFetching] = useState(false);
     const [pastingUrl, setPastingUrl] = useState('');
     const [isPasting, setIsPasting] = useState(false);
+    const [showAddJobModal, setShowAddJobModal] = useState(false);
+    const [addJobModalUrl, setAddJobModalUrl] = useState('');
+    const [addJobModalNotice, setAddJobModalNotice] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [generatingResumeFor, setGeneratingResumeFor] = useState<number | null>(null);
     const [jobResumes, setJobResumes] = useState<Record<number, string>>({});
@@ -289,23 +296,30 @@ export default function JobsPage() {
 
 
     const handleParseUrl = async () => {
-        if (!pastingUrl.trim()) return;
-        const token = getToken();
-        if (!token) return;
-
-        try {
-            new URL(pastingUrl); // Basic validation
-        } catch {
-            toast.error("Please enter a valid URL");
+        const trimmedUrl = pastingUrl.trim();
+        if (!trimmedUrl) {
+            setAddJobModalUrl('');
+            setAddJobModalNotice('');
+            setShowAddJobModal(true);
             return;
         }
+
+        try {
+            new URL(trimmedUrl);
+        } catch {
+            toast.error("Please enter a valid URL (including https://)");
+            return;
+        }
+
+        const token = getToken();
+        if (!token) return;
 
         setIsPasting(true);
         try {
             const res = await fetch(`${API}/jobs/parse-url`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: pastingUrl.trim() })
+                body: JSON.stringify({ url: trimmedUrl })
             });
             const data = await res.json();
 
@@ -313,11 +327,17 @@ export default function JobsPage() {
                 toast.success('Job parsed, scored, and added to pipeline!');
                 setPastingUrl('');
                 fetchJobs(); // Refresh jobs
+            } else if (res.status === 422 || res.status === 400) {
+                setAddJobModalUrl(trimmedUrl);
+                setAddJobModalNotice(data.detail || 'This site requires bot verification. Please paste the job description below.');
+                setShowAddJobModal(true);
             } else {
                 toast.error(data.detail || 'Failed to parse job from URL.');
             }
         } catch {
-            toast.error('Network error during parsing.');
+            setAddJobModalUrl(trimmedUrl);
+            setAddJobModalNotice('Could not reach that URL automatically. Please paste the job posting text below to extract it.');
+            setShowAddJobModal(true);
         } finally {
             setIsPasting(false);
         }
@@ -514,7 +534,9 @@ export default function JobsPage() {
         }
         return [...filtered].sort((a, b) => {
             if (sortBy === 'score') return (b.score?.score || 0) - (a.score?.score || 0);
-            return new Date(b.posted_date).getTime() - new Date(a.posted_date).getTime();
+            const dateB = b.posted_date ? new Date(b.posted_date).getTime() : 0;
+            const dateA = a.posted_date ? new Date(a.posted_date).getTime() : 0;
+            return dateB - dateA;
         });
     }, [jobs, searchQuery, sourceFilter, sortBy]);
 
@@ -580,12 +602,15 @@ export default function JobsPage() {
                                 type="text"
                                 value={pastingUrl}
                                 onChange={e => setPastingUrl(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleParseUrl();
+                                }}
                                 placeholder="Paste job URL..."
                                 className="w-48 pl-9 pr-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-sm dark:text-slate-200 focus:ring-2 focus:ring-slate-400 outline-none transition-all focus:w-64"
                             />
                             <Link className="w-4 h-4 absolute left-3 top-3 text-slate-400 dark:text-slate-500" />
                         </div>
-                        <button onClick={handleParseUrl} disabled={isPasting || !pastingUrl.trim()}
+                        <button onClick={handleParseUrl} disabled={isPasting}
                             className="btn-primary px-4 py-2.5 text-sm flex items-center gap-2 disabled:opacity-70 hover:scale-[1.02] shadow-sm whitespace-nowrap">
                             {isPasting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                             {isPasting ? 'Parsing...' : 'Add Job'}
@@ -715,7 +740,7 @@ export default function JobsPage() {
                         const isGenerating = generatingResumeFor === job.id;
                         const isEditingCL = editingCoverLetter === job.id;
 
-                        const isNewJob = settings.highlightNewJobs && new Date(job.posted_date).getTime() > Date.now() - 3 * 24 * 60 * 60 * 1000;
+                        const isNewJob = settings.highlightNewJobs && Boolean(job.posted_date) && new Date(job.posted_date!).getTime() > Date.now() - 3 * 24 * 60 * 60 * 1000;
 
                         return (
                             <motion.div
@@ -780,11 +805,18 @@ export default function JobsPage() {
                                         )}
 
                                         {/* Date + Actions */}
-                                        <div className="flex items-center gap-3 mt-3">
-                                            <span className="text-xs text-slate-400">
-                                                {new Date(job.posted_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        <div className="flex items-center gap-3 mt-3 flex-wrap">
+                                            {/* Neutral Recency Badge */}
+                                            <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                                {job.recency_label || 'Posting date unknown'}
                                             </span>
+                                            {Boolean(job.posted_date) && !isNaN(new Date(job.posted_date!).getTime()) && (
+                                                <span className="text-xs text-slate-400">
+                                                    {new Date(job.posted_date!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                </span>
+                                            )}
                                             <div className="flex-1" />
+                                            <LinkedInSearchMenu company={job.company} />
                                             {['applied', 'interview', 'interviewing', 'offer', 'offered', 'rejected', 'pending'].includes(job.status || '') ? (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border border-emerald-100 dark:border-emerald-900/30">
                                                     <CheckCircle2 className="w-3.5 h-3.5" /> Tracked
@@ -1074,6 +1106,18 @@ export default function JobsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Add Custom Job Modal */}
+            <AddJobModal
+                isOpen={showAddJobModal}
+                onClose={() => setShowAddJobModal(false)}
+                onJobAdded={() => {
+                    fetchJobs();
+                    setPastingUrl('');
+                }}
+                initialUrl={addJobModalUrl}
+                initialNotice={addJobModalNotice}
+            />
         </div>
     );
 }
