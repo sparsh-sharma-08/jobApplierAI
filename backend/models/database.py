@@ -51,6 +51,7 @@ class CandidateProfile(Base):
     preferred_locations = Column(JSON)  # list of strings
     remote_preference = Column(String)  # remote, hybrid, onsite, any
     min_salary = Column(Integer)
+    salary_currency = Column(String, default="USD")  # ISO 4217 code, e.g. USD, INR, GBP
     target_companies = Column(JSON)  # list of strings
     master_resume = Column(JSON)  # structured resume data
     weekly_digest = Column(Integer, default=1)  # 1 for True, 0 for False (for broader DB compatibility)

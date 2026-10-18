@@ -21,11 +21,8 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from models.database import Base, DATABASE_URL
 target_metadata = Base.metadata
 
-db_url = os.getenv("DATABASE_URL")
-if db_url:
-    config.set_main_option("sqlalchemy.url", db_url)
-elif not config.get_main_option("sqlalchemy.url"):
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+db_url = os.getenv("DATABASE_URL", DATABASE_URL)
+config.set_main_option("sqlalchemy.url", db_url)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

@@ -3,8 +3,32 @@ import requests
 from bs4 import BeautifulSoup
 from typing import Dict, Any, Optional
 import json
+import re
 
 logger = logging.getLogger(__name__)
+
+BOT_CHALLENGE_INDICATORS = [
+    "just a moment...",
+    "attention required! | cloudflare",
+    "verify you are human",
+    "checking your browser",
+    "enable javascript and cookies to continue",
+    "cf-browser-verification",
+    "access denied",
+    "please enable cookies",
+    "security check to access",
+    "robot or human?",
+]
+
+def is_bot_challenge(text: str) -> bool:
+    if not text or len(text.strip()) < 40:
+        return True
+    sample = text[:1500].lower()
+    for indicator in BOT_CHALLENGE_INDICATORS:
+        if indicator in sample:
+            return True
+    return False
+
 
 class UrlParserScraper:
     """
@@ -13,53 +37,63 @@ class UrlParserScraper:
     """
     
     def __init__(self):
-        # We need a robust header to avoid basic bot blocks
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
         }
 
     def fetch_page_text(self, url: str) -> Optional[str]:
         """Fetches the raw HTML of a URL and extracts the visible text."""
-        import re
         
-        # 1. Primary: Use Jina AI Reader API to bypass bot walls and get pure Markdown
+        # 1. Primary: Use Jina AI Reader API with timeout and headers
         try:
             logger.info(f"Fetching job URL via Jina AI: {url}")
             jina_url = f"https://r.jina.ai/{url}"
-            response = requests.get(jina_url, timeout=15)
+            jina_headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'X-No-Cache': 'true',
+            }
+            response = requests.get(jina_url, headers=jina_headers, timeout=10)
             
             if response.status_code == 200 and len(response.text) > 100:
-                # Basic cleaning of markdown whitespace
-                text = re.sub(r'\n{3,}', '\n\n', response.text)
-                
-                # Truncate irrelevant sections that confuse smaller LLMs
-                for marker in ["## Similar jobs", "## People also viewed", "### Similar Jobs", "## Explore top content"]:
-                    if marker in text:
-                        text = text.split(marker)[0]
-                
-                return text[:15000]
+                if not is_bot_challenge(response.text):
+                    text = re.sub(r'\n{3,}', '\n\n', response.text)
+                    for marker in ["## Similar jobs", "## People also viewed", "### Similar Jobs", "## Explore top content"]:
+                        if marker in text:
+                            text = text.split(marker)[0]
+                    return text[:15000]
+                else:
+                    logger.warning(f"Jina AI received bot challenge for {url}, falling back to direct scrape")
         except Exception as e:
             logger.warning(f"Jina AI fetch failed, falling back to direct scrape: {e}")
 
         # 2. Fallback: Direct Request Scrape
         try:
             logger.info(f"Fallback direct fetch: {url}")
-            response = requests.get(url, headers=self.headers, timeout=15)
+            response = requests.get(url, headers=self.headers, timeout=10, allow_redirects=True)
+            if response.status_code in [403, 429]:
+                logger.warning(f"Direct request received status {response.status_code} for {url}")
+                return None
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Remove script and style elements
             for script in soup(["script", "style", "nav", "footer", "header"]):
                 script.decompose()
 
-            # Get text and clean it up
             text = soup.get_text(separator=' ', strip=True)
             text = re.sub(r'\s+', ' ', text)
             
-            return text[:15000] # Cap length to avoid massive prompt token costs
+            if is_bot_challenge(text):
+                logger.warning(f"Direct scrape text matched bot challenge for {url}")
+                return None
+                
+            return text[:15000] if len(text) > 50 else None
             
         except requests.exceptions.Timeout:
             logger.error(f"Timeout fetching URL {url}")
@@ -70,6 +104,7 @@ class UrlParserScraper:
 
     def extract_job_details(self, url: str, raw_text: str) -> Dict[str, Any]:
         """Uses the LLM service to extract structured job data from raw text."""
+        clean_url = (url or "").strip() or "custom-url"
         try:
             from services.llm_service import get_openai_client, LLM_MODEL
             client = get_openai_client()
@@ -77,12 +112,12 @@ class UrlParserScraper:
                 raise Exception("LLM Client not configured")
 
             prompt = f"""
-            You are an expert technical recruiter analyzing a job posting scraped from the web.
-            The user provided this URL: {url}
+            You are an expert technical recruiter analyzing a job posting.
+            The user provided this source URL: {clean_url}
             
-            Here is the raw scraped text from the webpage:
+            Here is the raw text from the job posting:
             \"\"\"
-            {raw_text}
+            {raw_text[:12000]}
             \"\"\"
             
             Extract the core job details and return ONLY a valid JSON object matching this schema:
@@ -94,10 +129,10 @@ class UrlParserScraper:
                 "description": "A very clean, well-formatted Markdown summary of the role's requirements and responsibilities. NOTE: DO NOT ECHO THESE INSTRUCTIONS. PROVIDE ONLY THE CONTENT FROM THE POSTING."
             }}
             
-            Strictly focus on the MAIN job described in the text, not the 'Similar Jobs' or footer links.
-            If the text is in a foreign language (like Norwegian), translate the role and company to English if they are identifiable.
-            
-            Do not include any Markdown code blocks around the JSON output. Just output the raw JSON string.
+            Rules:
+            1. Strictly focus on the MAIN job described in the text, not 'Similar Jobs' or navigation links.
+            2. If role or company cannot be found, make an educated guess from context or use 'Software Engineer' / 'Hiring Company'. Never return 'Just a moment...' or prompt instructions.
+            3. Do not include markdown code block formatting like ```json. Output ONLY the JSON.
             """
 
             response = client.chat.completions.create(
@@ -110,14 +145,10 @@ class UrlParserScraper:
             )
             
             result_content = response.choices[0].message.content.strip()
-            
-            # 1. Try regex extraction for JSON block in case LLM added conversational text
-            import re
             json_match = re.search(r'(\{.*\})', result_content, re.DOTALL)
             if json_match:
                 result_content = json_match.group(1)
             else:
-                # 2. Manual fallbacks for common markdown patterns if regex failed
                 if result_content.startswith('```json'):
                     result_content = result_content[7:]
                 if result_content.startswith('```'):
@@ -125,36 +156,37 @@ class UrlParserScraper:
                 if result_content.endswith('```'):
                     result_content = result_content[:-3]
                 
-            try:
-                data = json.loads(result_content.strip())
-            except json.JSONDecodeError as je:
-                logger.error(f"JSON decode failed for content: {result_content}")
-                raise je
+            data = json.loads(result_content.strip())
             
-            # Format to match our internal Job schema expectations
+            role = (data.get("role") or "").strip() or "Imported Role"
+            company = (data.get("company") or "").strip() or "Unknown Company"
+            if role.lower() in ["just a moment...", "unknown role", ""]:
+                role = "Imported Role"
+            if company.lower() in ["just a moment...", "cloudflare", ""]:
+                company = "Unknown Company"
+
             return {
-                "external_id": f"custom-{url}",
+                "external_id": f"custom-{clean_url}",
                 "source": "custom-url",
-                "company": data.get("company", "Unknown Company"),
-                "role": data.get("role", "Unknown Role"),
-                "location": data.get("location", "Remote"),
-                "salary": data.get("salary", ""),
-                "description": data.get("description", raw_text[:500] + "..."),
-                "apply_link": url,
+                "company": company,
+                "role": role,
+                "location": (data.get("location") or "").strip() or "Remote",
+                "salary": (data.get("salary") or "").strip(),
+                "description": (data.get("description") or "").strip() or raw_text[:2000],
+                "apply_link": clean_url if clean_url.startswith("http") else "",
             }
             
         except Exception as e:
             logger.error(f"Failed to extract job details via LLM: {e}")
-            # Fallback to basic extraction
             return {
-                "external_id": f"custom-{url}",
+                "external_id": f"custom-{clean_url}",
                 "source": "custom-url",
-                "company": "Parsed URL",
-                "role": "Imported Job",
-                "location": "See Description",
+                "company": "Custom Job",
+                "role": "Imported Role",
+                "location": "Remote",
                 "salary": "",
-                "description": raw_text[:2000] if raw_text else "Failed to parse text.",
-                "apply_link": url,
+                "description": raw_text[:2000] if raw_text else "Custom imported job.",
+                "apply_link": clean_url if clean_url.startswith("http") else "",
             }
 
     def parse_url(self, url: str) -> Optional[Dict[str, Any]]:
@@ -164,3 +196,7 @@ class UrlParserScraper:
             return None
             
         return self.extract_job_details(url, text)
+
+    def parse_raw_text(self, raw_text: str, url: Optional[str] = None) -> Dict[str, Any]:
+        """Direct extraction from user-pasted text without scraping."""
+        return self.extract_job_details(url or "custom-pasted", raw_text)

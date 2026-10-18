@@ -81,6 +81,7 @@ class CandidateProfileCreate(BaseModel):
     preferred_locations: List[str] = []
     remote_preference: str = "any"
     min_salary: Optional[int] = None
+    salary_currency: Optional[str] = "USD"  # ISO 4217 code for salary comparison (e.g. USD, INR, GBP)
     target_companies: Optional[List[str]] = []
     master_resume: Optional[Dict[str, Any]] = None
     weekly_digest: bool = True
@@ -157,8 +158,35 @@ class JobScoreOut(BaseModel):
 
 class UrlInput(BaseModel):
     url: str
+    raw_text: Optional[str] = None
+
+class JobCreateManual(BaseModel):
+    role: str
+    company: str
+    location: Optional[str] = "Remote"
+    salary: Optional[str] = ""
+    description: Optional[str] = ""
+    apply_link: Optional[str] = ""
+
+class JobParseTextRequest(BaseModel):
+    text: str
+    url: Optional[str] = ""
 
 JobOut.model_rebuild()
+
+
+class JobListOut(BaseModel):
+    """Envelope for GET /jobs when apply_preferences=true.
+    total: count of jobs after preference filtering.
+    hidden_by_preferences: count excluded by preference rules.
+    jobs: the (paginated) result set.
+    """
+    total: int
+    hidden_by_preferences: int
+    jobs: List[JobOut]
+
+    class Config:
+        from_attributes = True
 
 class JobBulkAction(BaseModel):
     action: str # "delete" or "mark_applied"

@@ -30,11 +30,11 @@ from models.database import (
 from models.schemas import (
     UserCreate, UserOut, Token, TokenRefreshRequest,
     CandidateProfileCreate, CandidateProfileOut,
-    JobOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
+    JobOut, JobListOut, ResumeOut, ApplicationCreate, ApplicationUpdate, ApplicationOut,
     ApplicationEventCreate, ApplicationEventOut, FollowUpDueOut,
     ApplicationFollowUpStateOut, FunnelAnalyticsOut,
     ImpactMetricCreate, ImpactMetricOut,
-    UrlInput, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
+    UrlInput, JobCreateManual, JobParseTextRequest, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
     MockInterviewOut, ColdEmailOut, MockInterviewUpdate, ColdEmailUpdate,
     JobBulkAction,
     ResumeProfileCreate, ResumeProfileUpdate, ResumeProfileOut, StatsOut
@@ -45,6 +45,7 @@ from core.security import (
 )
 from core.helpers import profile_to_dict
 from services.scorer import score_job, batch_score_jobs
+from services.preference_filter import should_hide_job
 from services.llm_service import generate_resume, generate_cover_letter, parse_pdf_to_json, generate_mock_interview, generate_cold_email
 from services.resume_exporter import generate_resume_pdf_bytes
 from services.follow_up import compute_follow_up_state, next_follow_up_date, FollowUpKind
@@ -640,7 +641,7 @@ def get_master_resume(
 # JOB ENDPOINTS
 # ─────────────────────────────────────────
 
-@app.get("/jobs", response_model=List[JobOut])
+@app.get("/jobs", response_model=JobListOut)
 def list_jobs(
     min_score: Optional[float] = None,
     source: Optional[str] = None,
@@ -648,51 +649,118 @@ def list_jobs(
     offset: int = 0,
     exclude_applied: bool = False,
     profile_id: Optional[int] = None,
+    apply_preferences: bool = True,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):
-    # Determine the target profile for scoring context
-    if profile_id:
-        active_profile = db.query(ResumeProfile).filter(ResumeProfile.id == profile_id, ResumeProfile.user_id == current_user.id).first()
-    else:
-        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
-        # Fallback to the first one if no default set
-        if not active_profile:
-            active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+) -> JobListOut:
+    """
+    Return jobs for the current user with optional preference filtering.
 
+    Architecture:
+      - CandidateProfile: job-search preferences (remote_preference, min_salary,
+        salary_currency, preferred_locations).  Used here for *filtering*.
+      - ResumeProfile: resume/scoring data.  Used here only for *scoring*.
+      These two roles must never be conflated.
+
+    apply_preferences=true (default):
+      Filters jobs by remote_preference and min_salary/salary_currency from
+      CandidateProfile before pagination.  Returns JobListOut with total and
+      hidden_by_preferences counts so the UI can show "N hidden" without a
+      second request.
+
+    apply_preferences=false:
+      No preference filtering; returns all jobs (total == len(jobs),
+      hidden_by_preferences == 0).
+    """
+    # ── Scoring profile (ResumeProfile) ─────────────────────────────────────
+    if profile_id:
+        active_profile = db.query(ResumeProfile).filter(
+            ResumeProfile.id == profile_id,
+            ResumeProfile.user_id == current_user.id
+        ).first()
+    else:
+        active_profile = db.query(ResumeProfile).filter(
+            ResumeProfile.user_id == current_user.id,
+            ResumeProfile.is_default == True
+        ).first()
+        if not active_profile:
+            active_profile = db.query(ResumeProfile).filter(
+                ResumeProfile.user_id == current_user.id
+            ).first()
+
+    # ── Preference profile (CandidateProfile) ───────────────────────────────
+    # Only needed when filtering is on
+    candidate_profile = None
+    if apply_preferences:
+        candidate_profile = db.query(CandidateProfile).filter(
+            CandidateProfile.user_id == current_user.id
+        ).first()
+
+    # ── Base DB query ────────────────────────────────────────────────────────
     query = db.query(Job).filter(Job.user_id == current_user.id)
     if source:
         query = query.filter(Job.source == source)
-    
+
     if min_score is not None and active_profile:
         query = query.join(JobScore, JobScore.job_id == Job.id).filter(
             JobScore.score >= min_score,
             JobScore.profile_id == active_profile.id
         )
-        
+
     if exclude_applied:
         query = query.filter(~Job.applications.any())
-        
-    jobs = query.order_by(Job.fetched_date.desc()).offset(offset).limit(limit).all()
-    
-    from services.scorer import score_job
-    
-    for job in jobs:
-        # Resolve status for current user
-        user_app = next((a for a in job.applications if a.user_id == current_user.id), None)
-        if user_app:
-            job.status = user_app.status
+
+    # Fetch ALL matching jobs (no offset/limit yet) so we can count hidden jobs
+    all_jobs = query.order_by(Job.fetched_date.desc()).all()
+
+    # ── Preference filtering (post-query, before pagination) ─────────────────
+    from services.scorer import score_job  # local to avoid circular at module level
+
+    remote_pref = None
+    min_salary = None
+    salary_currency = None
+    pref_locations = None
+    if apply_preferences and candidate_profile:
+        remote_pref = candidate_profile.remote_preference
+        min_salary = candidate_profile.min_salary
+        salary_currency = candidate_profile.salary_currency
+        pref_locations = candidate_profile.preferred_locations
+
+    visible_jobs = []
+    hidden_count = 0
+    for job in all_jobs:
+        if apply_preferences and should_hide_job(
+            location=job.location,
+            description=job.description,
+            salary=job.salary,
+            remote_preference=remote_pref,
+            min_salary=min_salary,
+            salary_currency=salary_currency,
+            preferred_locations=pref_locations,
+        ):
+            hidden_count += 1
         else:
-            job.status = "saved"
-            
-        # Resolve score for the active profile
+            visible_jobs.append(job)
+
+    total_visible = len(visible_jobs)
+
+    # Apply pagination over the filtered set
+    paginated = visible_jobs[offset: offset + limit]
+
+    # ── Decorate each job with status and score ───────────────────────────────
+    for job in paginated:
+        # Status for current user
+        user_app = next((a for a in job.applications if a.user_id == current_user.id), None)
+        job.status = user_app.status if user_app else "saved"
+
+        # Score for the active resume profile
         if active_profile:
             score_rec = db.query(JobScore).filter(
-                JobScore.job_id == job.id, 
+                JobScore.job_id == job.id,
                 JobScore.profile_id == active_profile.id
             ).first()
-            
-            # On-the-fly scoring if missing for this profile
+
+            # On-the-fly scoring if missing
             if not score_rec and active_profile.master_resume:
                 try:
                     job_dict = {
@@ -710,21 +778,25 @@ def list_jobs(
                     }
                     result = score_job(job_dict, profile_dict)
                     score_rec = JobScore(
-                        job_id=job.id, 
-                        profile_id=active_profile.id, 
-                        score=result["score"], 
+                        job_id=job.id,
+                        profile_id=active_profile.id,
+                        score=result["score"],
                         explanation=result["explanation"]
                     )
                     db.add(score_rec)
-                    db.commit() # Commit each to ensure it's saved even if loop breaks
+                    db.commit()
                 except Exception as e:
                     logger.error(f"Failed on-the-fly score: {e}")
-            
+
             job.score = score_rec
         else:
             job.score = None
-            
-    return jobs
+
+    return JobListOut(
+        total=total_visible,
+        hidden_by_preferences=hidden_count,
+        jobs=paginated,
+    )
 
 
 @app.delete("/jobs/clear")
@@ -948,30 +1020,41 @@ def parse_job_url(
 ):
     profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
     if not profile:
-        raise HTTPException(status_code=400, detail="Please set up your profile first")
+        profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+        if not profile:
+            raise HTTPException(status_code=400, detail="Please set up your profile first")
 
-    # Parse URL
-    from scrapers.url_parser import UrlParserScraper
-    scraper = UrlParserScraper()
-    try:
-        job_data = scraper.parse_url(payload.url)
-    except Exception as e:
-        logger.error(f"URL Parsing failed for {payload.url}: {e}")
-        raise HTTPException(status_code=500, detail=f"AI Extraction failed: {str(e)}")
-    
-    if not job_data:
-        raise HTTPException(status_code=400, detail="Could not reach or extract content from that URL. LinkedIn and other major sites may occasionally block our automated requests. Please try again or copy-paste the text manually.")
-        
-    # Check if we already scraped this exact URL manually
+    # Check if we already added this exact URL
     existing_job = db.query(Job).filter(
         Job.user_id == current_user.id,
         Job.apply_link == payload.url
     ).first()
-    
     if existing_job:
         raise HTTPException(status_code=409, detail="You have already added this job to your tracker.")
 
-    # Score it against the DEFAULT ResumeProfile
+    from scrapers.url_parser import UrlParserScraper
+    scraper = UrlParserScraper()
+
+    if payload.raw_text and payload.raw_text.strip():
+        try:
+            job_data = scraper.parse_raw_text(payload.raw_text, payload.url)
+        except Exception as e:
+            logger.error(f"Text parsing failed for {payload.url}: {e}")
+            raise HTTPException(status_code=500, detail=f"AI Extraction failed: {str(e)}")
+    else:
+        try:
+            job_data = scraper.parse_url(payload.url)
+        except Exception as e:
+            logger.error(f"URL Parsing failed for {payload.url}: {e}")
+            raise HTTPException(status_code=500, detail=f"AI Extraction failed: {str(e)}")
+    
+    if not job_data:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not reach or extract content from that URL. Major job boards like Indeed and LinkedIn require bot verification. Please paste the job description text to parse it."
+        )
+
+    # Score it against the active ResumeProfile
     from services.scorer import score_job
     active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
     if not active_profile:
@@ -985,12 +1068,11 @@ def parse_job_url(
             "master_resume": active_profile.master_resume or {}
         }
     else:
-        # Emergency fallback to CandidateProfile if No ResumeProfile exists at all
-        profile_dict = profile_to_dict(profile)
+        profile_dict = profile_to_dict(profile) if profile else {}
     
     score_result = score_job(job_data, profile_dict)
     
-    # Save the DB
+    # Save the DB (posted_date is None for custom URLs)
     new_job = Job(
         external_id=job_data["external_id"],
         source=job_data["source"],
@@ -1002,7 +1084,7 @@ def parse_job_url(
         description=job_data["description"],
         apply_link=job_data["apply_link"],
         fetched_date=datetime.utcnow(),
-        posted_date=datetime.utcnow()
+        posted_date=None
     )
     db.add(new_job)
     db.commit()
@@ -1018,7 +1100,139 @@ def parse_job_url(
     db.add(new_score)
     db.commit()
     
-    # Refresh to include relations
+    db.refresh(new_job)
+    return new_job
+
+
+@app.post("/jobs/parse-text", response_model=JobOut)
+def parse_job_text(
+    payload: JobParseTextRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not payload.text or len(payload.text.strip()) < 15:
+        raise HTTPException(status_code=400, detail="Please provide the job posting text.")
+
+    from scrapers.url_parser import UrlParserScraper
+    scraper = UrlParserScraper()
+    try:
+        job_data = scraper.parse_raw_text(payload.text, payload.url)
+    except Exception as e:
+        logger.error(f"Text parsing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"AI Extraction failed: {str(e)}")
+
+    from services.scorer import score_job
+    active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+    if not active_profile:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
+    if active_profile:
+        profile_dict = {
+            "skills": active_profile.skills or [],
+            "experience_level": active_profile.experience_level or "mid",
+            "preferred_roles": active_profile.preferred_roles or [],
+            "master_resume": active_profile.master_resume or {}
+        }
+    else:
+        profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+        profile_dict = profile_to_dict(profile) if profile else {}
+
+    score_result = score_job(job_data, profile_dict)
+
+    clean_link = (payload.url or "").strip()
+    new_job = Job(
+        external_id=job_data["external_id"],
+        source="custom-text",
+        user_id=current_user.id,
+        company=job_data["company"],
+        role=job_data["role"],
+        location=job_data["location"],
+        salary=job_data.get("salary", ""),
+        description=job_data["description"],
+        apply_link=clean_link if clean_link.startswith("http") else "",
+        fetched_date=datetime.utcnow(),
+        posted_date=None
+    )
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job)
+
+    new_score = JobScore(
+        job_id=new_job.id,
+        profile_id=active_profile.id if active_profile else None,
+        score=score_result["score"],
+        explanation=score_result["explanation"]
+    )
+    db.add(new_score)
+    db.commit()
+
+    db.refresh(new_job)
+    return new_job
+
+
+@app.post("/jobs/manual", response_model=JobOut)
+def create_job_manually(
+    payload: JobCreateManual,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not payload.role.strip() or not payload.company.strip():
+        raise HTTPException(status_code=400, detail="Role and Company are required.")
+
+    from services.scorer import score_job
+    active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id, ResumeProfile.is_default == True).first()
+    if not active_profile:
+        active_profile = db.query(ResumeProfile).filter(ResumeProfile.user_id == current_user.id).first()
+
+    job_dict = {
+        "role": payload.role.strip(),
+        "company": payload.company.strip(),
+        "location": payload.location or "Remote",
+        "salary": payload.salary or "",
+        "description": payload.description or "",
+        "apply_link": payload.apply_link or ""
+    }
+
+    if active_profile:
+        profile_dict = {
+            "skills": active_profile.skills or [],
+            "experience_level": active_profile.experience_level or "mid",
+            "preferred_roles": active_profile.preferred_roles or [],
+            "master_resume": active_profile.master_resume or {}
+        }
+    else:
+        profile = db.query(CandidateProfile).filter(CandidateProfile.user_id == current_user.id).first()
+        profile_dict = profile_to_dict(profile) if profile else {}
+
+    score_result = score_job(job_dict, profile_dict)
+
+    clean_link = (payload.apply_link or "").strip()
+    new_job = Job(
+        external_id=f"manual-{datetime.utcnow().timestamp()}",
+        source="manual",
+        user_id=current_user.id,
+        company=payload.company.strip(),
+        role=payload.role.strip(),
+        location=(payload.location or "Remote").strip(),
+        salary=(payload.salary or "").strip(),
+        description=(payload.description or "").strip(),
+        apply_link=clean_link if clean_link.startswith("http") else "",
+        fetched_date=datetime.utcnow(),
+        posted_date=None
+    )
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job)
+
+    new_score = JobScore(
+        job_id=new_job.id,
+        profile_id=active_profile.id if active_profile else None,
+        score=score_result["score"],
+        explanation=score_result["explanation"]
+    )
+    db.add(new_score)
+    db.commit()
+
     db.refresh(new_job)
     return new_job
 

@@ -22,7 +22,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from main import app
-from models.database import Base, get_db, Job, User, Application, ApplicationEvent
+from models.database import Base, get_db, Job, User, Application, ApplicationEvent, ResumeProfile
 from core.security import create_access_token, get_password_hash
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_funnel.db"
@@ -925,7 +925,7 @@ def test_job_recency_label_api_and_null_date():
     hdr = {"Authorization": f"Bearer {token}"}
     res = client.get("/jobs", headers=hdr)
     assert res.status_code == 200
-    job_map = {job["id"]: job for job in res.json()}
+    job_map = {job["id"]: job for job in res.json()["jobs"]}
 
     assert job_map[j_null_id]["posted_date"] is None
     assert job_map[j_null_id]["recency_label"] == "Posting date unknown"
@@ -962,4 +962,69 @@ def test_linkedin_search_url_encoding_special_chars():
     # Empty / whitespace company
     assert build_url("Engineering Manager ", "") == ""
     assert build_url("Engineering Manager ", "   ") == ""
+
+
+def test_manual_job_creation_and_parse_text():
+    """Verify manual job creation and raw text parsing endpoints."""
+    token = create_access_token(data={"sub": "custom_job_user@example.com"})
+    db = TestingSessionLocal()
+    user = User(email="custom_job_user@example.com", hashed_password=get_password_hash("pass"), is_verified=True)
+    db.add(user)
+    db.commit()
+    user_id = user.id
+
+    prof = ResumeProfile(
+        user_id=user_id,
+        name="Backend Dev",
+        skills=["Python", "FastAPI"],
+        is_default=True
+    )
+    db.add(prof)
+    db.commit()
+    db.close()
+
+    hdr = {"Authorization": f"Bearer {token}"}
+
+    # 1. Test POST /jobs/manual
+    res_manual = client.post("/jobs/manual", json={
+        "role": "Senior Backend Engineer",
+        "company": "Acme Corp",
+        "location": "Bengaluru, India",
+        "salary": "₹30-40 LPA",
+        "description": "Looking for Python and FastAPI developer",
+        "apply_link": "https://acme.com/careers/123"
+    }, headers=hdr)
+    assert res_manual.status_code == 200
+    m_data = res_manual.json()
+    assert m_data["role"] == "Senior Backend Engineer"
+    assert m_data["company"] == "Acme Corp"
+    assert m_data["source"] == "manual"
+    assert m_data["posted_date"] is None
+    assert m_data["recency_label"] == "Posting date unknown"
+
+    # 2. Test POST /jobs/parse-text
+    res_text = client.post("/jobs/parse-text", json={
+        "text": "Senior Python Developer needed at TechSolutions. Location: Remote. Requirements: 5 years Python experience.",
+        "url": "https://in.indeed.com/viewjob?jk=custom123"
+    }, headers=hdr)
+    assert res_text.status_code == 200
+    t_data = res_text.json()
+    assert t_data["source"] == "custom-text"
+    assert t_data["posted_date"] is None
+    assert t_data["recency_label"] == "Posting date unknown"
+    assert len(t_data["role"]) > 0
+    assert len(t_data["company"]) > 0
+
+    # 3. Test POST /jobs/parse-url with raw_text fallback
+    res_url_fallback = client.post("/jobs/parse-url", json={
+        "url": "https://in.indeed.com/viewjob?jk=fallback123",
+        "raw_text": "Staff Engineer at CloudScale. Location: Hybrid. Deep knowledge of distributed systems."
+    }, headers=hdr)
+    assert res_url_fallback.status_code == 200
+    fb_data = res_url_fallback.json()
+    assert fb_data["source"] == "custom-url"
+    assert fb_data["apply_link"] == "https://in.indeed.com/viewjob?jk=fallback123"
+    assert fb_data["posted_date"] is None
+    assert fb_data["recency_label"] == "Posting date unknown"
+
 
