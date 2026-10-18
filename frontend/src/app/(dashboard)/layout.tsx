@@ -25,6 +25,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const { settings, setSettings } = useSettings();
 
     useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const searchParams = new URLSearchParams(window.location.search);
+            const urlToken = searchParams.get('token');
+            const urlRefresh = searchParams.get('refresh_token');
+            if (urlToken) localStorage.setItem('token', urlToken);
+            if (urlRefresh) localStorage.setItem('refresh_token', urlRefresh);
+        }
         const token = localStorage.getItem('token');
         if (!token) { router.push('/'); return; }
 

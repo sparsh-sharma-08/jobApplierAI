@@ -70,6 +70,8 @@ export default function JobsPage() {
     const { profiles, activeProfileId, setActiveProfileId, loading: profilesLoading } = useResumeProfiles();
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
+    const [hiddenByPreferences, setHiddenByPreferences] = useState(0);
+    const [applyPreferences, setApplyPreferences] = useState(true);
     const [expandedJob, setExpandedJob] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -136,13 +138,18 @@ export default function JobsPage() {
         if (!token) return;
         setLoading(true);
         try {
-            const url = activeProfileId 
-                ? `${API}/jobs?limit=200&profile_id=${activeProfileId}` 
-                : `${API}/jobs?limit=200`;
+            const profilePart = activeProfileId ? `&profile_id=${activeProfileId}` : '';
+            const prefPart = applyPreferences ? '' : '&apply_preferences=false';
+            const url = `${API}/jobs?limit=200${profilePart}${prefPart}`;
             const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-            if (res.ok) { const data = await res.json(); setJobs(data); }
+            if (res.ok) {
+                const data = await res.json();
+                // Backend returns JobListOut: { total, hidden_by_preferences, jobs }
+                setJobs(data.jobs ?? data);  // fallback for safety
+                setHiddenByPreferences(data.hidden_by_preferences ?? 0);
+            }
         } catch { } finally { setLoading(false); }
-    }, [activeProfileId]);
+    }, [activeProfileId, applyPreferences]);
 
     useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
@@ -199,14 +206,18 @@ export default function JobsPage() {
                 attempts++;
                 if (attempts > 40) { clearInterval(poll); setIsFetching(false); fetchJobs(); return; }
                 try {
-                    const res = await fetch(`${API}/jobs?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
+                    // Pass profile_id in poll so scoring path matches the list view
+                    const profilePart = activeProfileId ? `&profile_id=${activeProfileId}` : '';
+                    const res = await fetch(`${API}/jobs?limit=200${profilePart}`, { headers: { Authorization: `Bearer ${token}` } });
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.length > jobs.length) {
+                        const fetched = data.jobs ?? data;
+                        if (fetched.length > jobs.length) {
                             clearInterval(poll);
-                            setJobs(data);
+                            setJobs(fetched);
+                            setHiddenByPreferences(data.hidden_by_preferences ?? 0);
                             setIsFetching(false);
-                            toast.success(`Fetched ${data.length - jobs.length} new jobs! 🎉`);
+                            toast.success(`Fetched ${fetched.length - jobs.length} new jobs! 🎉`);
                         }
                     }
                 } catch { }
@@ -658,7 +669,45 @@ export default function JobsPage() {
                     <option value="score">Highest Score</option>
                     <option value="date">Most Recent</option>
                 </select>
+
+                <label className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300 cursor-pointer select-none hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                        type="checkbox"
+                        checked={applyPreferences}
+                        onChange={e => setApplyPreferences(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span>Apply preferences</span>
+                </label>
             </div>
+
+            {/* Hidden by preferences banner */}
+            {applyPreferences && hiddenByPreferences > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl text-sm text-amber-900 dark:text-amber-200 animate-in fade-in slide-in-from-top-1 duration-300">
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold">{hiddenByPreferences} {hiddenByPreferences === 1 ? 'job' : 'jobs'} hidden</span>
+                        <span>by your preferences</span>
+                    </div>
+                    <div className="flex items-center gap-2 font-medium">
+                        (
+                        <a
+                            href="/settings"
+                            className="underline hover:text-amber-700 dark:hover:text-amber-100 transition-colors"
+                        >
+                            edit preferences
+                        </a>
+                        <span className="text-amber-400 dark:text-amber-600">|</span>
+                        <button
+                            type="button"
+                            onClick={() => setApplyPreferences(false)}
+                            className="underline hover:text-amber-700 dark:hover:text-amber-100 transition-colors"
+                        >
+                            show all
+                        </button>
+                        )
+                    </div>
+                </div>
+            )}
 
             {/* Job Cards */}
             {filteredAndSorted.length === 0 ? (

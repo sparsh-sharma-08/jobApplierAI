@@ -65,7 +65,7 @@ export default function DashboardPage() {
 
             if (jobsRes.ok) {
                 const data = await jobsRes.json();
-                setJobs(data);
+                setJobs(Array.isArray(data) ? data : (data.jobs || []));
             }
             if (profileRes.ok) {
                 const profileData = await profileRes.json();
@@ -163,11 +163,12 @@ export default function DashboardPage() {
                     const res = await fetch(`${API}/jobs?limit=500`, { headers: { Authorization: `Bearer ${token}` } });
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.length > prevCount) {
+                        const jobList = Array.isArray(data) ? data : (data.jobs || []);
+                        if (jobList.length > prevCount) {
                             clearInterval(poll);
-                            setJobs(data);
+                            setJobs(jobList);
                             setIsFetchingJobs(false);
-                            toast.success(`Fetched ${data.length - prevCount} new jobs! 🎉`);
+                            toast.success(`Fetched ${jobList.length - prevCount} new jobs! 🎉`);
                         }
                     }
                 } catch { }
@@ -383,7 +384,7 @@ export default function DashboardPage() {
                                 {topJobs.map(job => (
                                     <Link key={job.id} href="/jobs" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors group">
                                         <div className={`w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center flex-shrink-0`}>
-                                            <span className="text-slate-900 dark:text-white font-black text-sm">{job.score?.score.toFixed(1)}</span>
+                                            <span className="text-slate-900 dark:text-white font-black text-sm">{Number(job.score?.score || 0).toFixed(1)}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{job.role}</p>
